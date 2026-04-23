@@ -10,6 +10,8 @@ export interface UserProfile {
   birthTime?: string;
   birthLocation?: string;
   sunSign: ZodiacSign;
+  astroData?: BirthChartInterpretation;
+  isPremium?: boolean;
 }
 
 export interface HoroscopeData {
@@ -75,6 +77,13 @@ export interface CompatibilityResult {
   summary: string;
   strengths: string[];
   challenges: CompatibilityChallenge[];
+  breakdown: {
+    communication: number;
+    passion: number;
+    emotional: number;
+    values: number;
+    trust: number;
+  };
 }
 
 export interface TarotCard {

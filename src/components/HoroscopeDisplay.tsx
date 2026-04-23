@@ -1,8 +1,8 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { HoroscopeData, SIGN_NAMES_MN } from '../types';
-import { Sparkles, Heart, Briefcase, Activity, Landmark, Moon, User } from 'lucide-react';
+import { Sparkles, Heart, Briefcase, Activity, Landmark, Moon, User, Share2, Copy, Check } from 'lucide-react';
 
 interface Props {
   data: HoroscopeData | null;
@@ -11,6 +11,8 @@ interface Props {
 }
 
 export default function HoroscopeDisplay({ data, isLoading, isPersonalized }: Props) {
+  const [copied, setCopied] = useState(false);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 glass-card min-h-[400px]">
@@ -25,7 +27,50 @@ export default function HoroscopeDisplay({ data, isLoading, isPersonalized }: Pr
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-card border-dashed border-white/10 min-h-[400px] max-w-2xl mx-auto">
+        <motion.div
+           initial={{ opacity: 0 }}
+           animate={{ opacity: 1 }}
+           className="text-center"
+        >
+          <Sparkles className="w-12 h-12 text-slate-700 mx-auto mb-6" />
+          <h3 className="text-xl font-serif text-slate-400 mb-2 italic">Зурхай бэлэн биш байна</h3>
+          <p className="text-slate-500 text-sm max-w-xs mx-auto leading-relaxed">
+            Та дээрх жагсаалтаас өөрийн ордоо сонгож өнөөдрийн тэнгэрийн зурлагаа харна уу.
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const handleShare = async () => {
+    const text = `${SIGN_NAMES_MN[data.sign] || data.sign} ордын өнөөдрийн (${data.date}) зурхай: "${data.dailyMessage}" #Astra #Zodiac`;
+    const url = window.location.href;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Astra - ${SIGN_NAMES_MN[data.sign] || data.sign} Зурхай`,
+          text: text,
+          url: url,
+        });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Error sharing:', err);
+        }
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${text}\n\n${url}`);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy!', err);
+      }
+    }
+  };
 
   return (
     <AnimatePresence mode="wait">
@@ -34,16 +79,30 @@ export default function HoroscopeDisplay({ data, isLoading, isPersonalized }: Pr
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
-        className="glass-card p-4 sm:p-8 max-w-2xl mx-auto border-indigo-500/20 bg-gradient-to-br from-indigo-900/40 to-slate-900"
+        className="glass-card p-4 sm:p-8 max-w-2xl mx-auto border-indigo-500/20 bg-gradient-to-br from-indigo-900/40 to-slate-900 overflow-hidden"
       >
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/10 blur-3xl"></div>
-        {isPersonalized && (
-          <div className="mb-4 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] font-bold text-astra-gold">
-            <User size={12} />
-            Хувийн Зөвлөгөө
+        
+        <div className="flex justify-between items-start relative z-20">
+          <div>
+            {isPersonalized && (
+              <div className="mb-4 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] font-bold text-astra-gold">
+                <User size={12} />
+                Хувийн Зөвлөгөө
+              </div>
+            )}
           </div>
-        )}
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8 relative z-10">
+          <button 
+            onClick={handleShare}
+            className="p-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 text-slate-400 hover:text-white transition-all flex items-center gap-2 active:scale-95"
+            title="Хуваалцах"
+          >
+            {copied ? <Check size={14} className="text-emerald-400" /> : <Share2 size={14} />}
+            <span className="text-[10px] uppercase font-bold tracking-widest hidden sm:inline">{copied ? 'Хуулсан' : 'Хуваалцах'}</span>
+          </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-8 relative z-10 mt-2">
           <div>
             <span className="text-[10px] uppercase tracking-widest text-indigo-400 font-mono font-bold">Өнөөдрийн орд</span>
             <h2 className="text-3xl sm:text-5xl font-serif font-bold text-white mt-1">{SIGN_NAMES_MN[data.sign] || data.sign}</h2>

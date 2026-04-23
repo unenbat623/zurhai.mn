@@ -6,6 +6,7 @@ import { NumerologyData, UserProfile } from '../types';
 import { fetchNumerology } from '../services/geminiService';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { toast } from '../lib/toast';
 
 interface Props {
   userProfile: UserProfile | null;
@@ -42,9 +43,10 @@ export default function NumerologyView({ userProfile }: Props) {
       
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Numerology_Report_${userProfile?.name}.pdf`);
+      toast.success('PDF тайлан амжилттай татагдлаа.');
     } catch (err) {
       console.error('PDF Export Error:', err);
-      alert('PDF татахад алдаа гарлаа.');
+      toast.error('PDF татахад алдаа гарлаа.');
     } finally {
       setExporting(false);
     }
@@ -66,6 +68,8 @@ export default function NumerologyView({ userProfile }: Props) {
       console.error(err);
       if (err.message === 'QUOTA_EXCEEDED') {
         setError('QUOTA_EXCEEDED');
+      } else {
+        toast.error('Тоон зурхай ачаалахад алдаа гарлаа.');
       }
     } finally {
       setLoading(false);

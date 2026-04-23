@@ -2,13 +2,14 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, ZODIAC_SIGNS, SIGN_NAMES_MN } from '../types';
 import React, { useState, useEffect } from 'react';
-import { MapPin, Clock, Calendar, User, Check, AlertCircle, Sparkles } from 'lucide-react';
+import { MapPin, Clock, Calendar, User, Check, AlertCircle, Sparkles, Mail } from 'lucide-react';
 
 interface Props {
   onSave: (profile: UserProfile) => void;
 }
 
 export default function BirthChartForm({ onSave }: Props) {
+  const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<Partial<UserProfile>>({
     name: '',
     birthDate: '',
@@ -24,9 +25,10 @@ export default function BirthChartForm({ onSave }: Props) {
   const validate = (name: string, value: string) => {
     let error = '';
     if (name === 'name') {
-      if (!value.trim()) error = 'Нэрээ оруулна уу';
-      else if (value.length < 2) error = 'Нэр хэт богино байна (хамгийн багадаа 2 тэмдэгт)';
-      else if (value.length > 50) error = 'Нэр хэт урт байна';
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!value.trim()) error = 'И-мейл хаягаа оруулна уу';
+      else if (!emailRegex.test(value)) error = 'Буруу и-мейл хаяг байна (Жишээ: name@example.com)';
+      else if (value.length > 100) error = 'И-мейл хэт урт байна';
     }
     if (name === 'birthDate') {
       if (!value) error = 'Төрсөн огноогоо сонгоно уу';
@@ -77,17 +79,24 @@ export default function BirthChartForm({ onSave }: Props) {
     }
   };
 
+  const nextStep = () => {
+    if (currentStep === 1) {
+      const err = validate('name', formData.name || '');
+      setTouched(prev => ({ ...prev, name: true }));
+      if (!err && formData.name) setCurrentStep(2);
+    } else if (currentStep === 2) {
+      const dErr = validate('birthDate', formData.birthDate || '');
+      const tErr = validate('birthTime', formData.birthTime || '');
+      setTouched(prev => ({ ...prev, birthDate: true, birthTime: true }));
+      if (!dErr && !tErr && formData.birthDate && formData.birthTime) setCurrentStep(3);
+    }
+  };
+
+  const prevStep = () => setCurrentStep(prev => Math.max(1, prev - 1));
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const nameErr = validate('name', formData.name || '');
-    const dateErr = validate('birthDate', formData.birthDate || '');
-    const timeErr = validate('birthTime', formData.birthTime || '');
-    const locErr = validate('birthLocation', formData.birthLocation || '');
-    
-    setTouched({ name: true, birthDate: true, birthLocation: true, birthTime: true });
-
-    if (!nameErr && !dateErr && !timeErr && !locErr && 
-        formData.name && formData.birthDate && formData.birthTime && formData.birthLocation && formData.sunSign) {
+    if (isValid) {
       onSave(formData as UserProfile);
     }
   };
@@ -99,12 +108,9 @@ export default function BirthChartForm({ onSave }: Props) {
     return `${base} border-emerald-500/50 focus:border-emerald-500 bg-emerald-500/5`;
   };
 
-  const progress = [
-    formData.name ? 1 : 0,
-    formData.birthDate ? 1 : 0,
-    formData.birthTime ? 1 : 0,
-    formData.birthLocation ? 1 : 0,
-  ].reduce((a, b) => a + b, 0) / 4 * 100;
+  const stepProgress = (currentStep / 3) * 100;
+
+  const stepLabels = ['Үндсэн', 'Цаг хугацаа', 'Байршил'];
 
   return (
     <motion.div
@@ -116,207 +122,221 @@ export default function BirthChartForm({ onSave }: Props) {
       <div className="absolute top-0 left-0 w-full h-1 bg-white/5">
         <motion.div 
           initial={{ width: 0 }}
-          animate={{ width: `${progress}%` }}
+          animate={{ width: `${stepProgress}%` }}
           className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
         />
       </div>
 
-      <div className="text-center mb-10">
-        <h2 className="text-3xl md:text-4xl font-serif text-white mb-3">Хувийн Ордын Зураглал</h2>
-        <p className="text-xs md:text-sm font-sans text-slate-500 font-light max-w-sm mx-auto leading-relaxed">
-          Сансрын биетүүдийн танд өгөх зөвлөгөөг авахын тулд мэдээллээ үнэн зөв оруулна уу.
+      <div className="text-center mb-10 relative">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 border border-indigo-500/10 rounded-full -z-10 animate-[pulse_6s_infinite]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 border border-indigo-500/5 rounded-full -z-10" />
+        <h2 className="text-3xl md:text-3xl font-serif text-white mb-6 tracking-tight">Сансрын Хөтөч</h2>
+        
+        {/* Visual Stepper */}
+        <div className="flex items-center justify-between max-w-[280px] mx-auto mb-8 relative">
+          <div className="absolute top-1/2 left-0 w-full h-[1px] bg-white/10 -translate-y-1/2 -z-10" />
+          {stepLabels.map((label, i) => {
+            const stepNum = i + 1;
+            const isActive = currentStep === stepNum;
+            const isCompleted = currentStep > stepNum;
+            
+            return (
+              <div key={label} className="flex flex-col items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all duration-500 ${
+                  isActive ? 'bg-indigo-600 border-indigo-500 text-white scale-110 shadow-lg shadow-indigo-600/30' : 
+                  isCompleted ? 'bg-emerald-500 border-emerald-400 text-white' : 
+                  'bg-slate-900 border-white/10 text-slate-500'
+                }`}>
+                  {isCompleted ? <Check size={14} /> : stepNum}
+                </div>
+                <span className={`text-[8px] uppercase tracking-tighter transition-colors duration-500 ${
+                  isActive ? 'text-indigo-400 font-bold' : 'text-slate-600'
+                }`}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="text-xs font-sans text-slate-500 font-light max-w-sm mx-auto leading-relaxed uppercase tracking-widest hidden md:block">
+          {currentStep === 1 ? 'Оддын зураглал гаргахад таны мэдээлэл чухал.' : currentStep === 2 ? 'Төрсөн агшин бол сансар огторгуйн дардас юм.' : 'Одон орны байршил таны хувь тавиланг тодорхойлно.'}
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8" noValidate>
-        {/* Name Field */}
-        <div className="relative">
-          <label htmlFor="name" className="block text-[10px] uppercase tracking-[0.3em] text-slate-400 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
-            Таны Нэр
-            {touched.name && !errors.name && formData.name && <Check size={12} className="text-emerald-500" />}
-          </label>
-          <div className="relative group">
-            <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.name && errors.name ? 'text-rose-500' : touched.name && !errors.name ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
-            <input
-              id="name"
-              type="text"
-              placeholder="Жишээ: Ану"
-              aria-invalid={!!(touched.name && errors.name)}
-              aria-describedby={touched.name && errors.name ? "name-error" : undefined}
-              className={getInputFieldClasses('name')}
-              value={formData.name}
-              onBlur={() => handleBlur('name')}
-              onChange={(e) => handleChange('name', e.target.value)}
-            />
-            {touched.name && (
-              <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                {errors.name ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
+        <AnimatePresence mode="wait">
+          {currentStep === 1 && (
+            <motion.div
+              key="step1"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6"
+            >
+              <div className="relative">
+                <label className="block text-[10px] uppercase tracking-[0.3em] text-slate-400 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
+                  И-мейл хаяг
+                  {touched.name && !errors.name && formData.name && <Check size={12} className="text-emerald-500" />}
+                </label>
+                <div className="relative group">
+                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.name && errors.name ? 'text-rose-500' : touched.name && !errors.name ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
+                  <input
+                    type="email"
+                    placeholder="example@mail.com"
+                    className={getInputFieldClasses('name')}
+                    value={formData.name}
+                    onBlur={() => handleBlur('name')}
+                    onChange={(e) => handleChange('name', e.target.value)}
+                  />
+                </div>
+                <ErrorMsg touched={touched.name} error={errors.name} />
               </div>
-            )}
-          </div>
-          <AnimatePresence>
-            {touched.name && errors.name && (
-              <motion.p 
-                id="name-error" 
-                initial={{ opacity: 0, height: 0, y: -10 }} 
-                animate={{ opacity: 1, height: 'auto', y: 0 }} 
-                exit={{ opacity: 0, height: 0, y: -10 }}
-                className="text-[10px] text-rose-500 mt-2 ml-1 font-mono flex items-center gap-1"
-              >
-                <AlertCircle size={10} /> {errors.name}
-              </motion.p>
-            )}
-          </AnimatePresence>
-        </div>
 
-        {/* Date & Time Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="relative">
-            <label htmlFor="birthDate" className="block text-[10px] uppercase tracking-[0.3em] text-slate-400 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
-              Төрсөн Огноо
-              {touched.birthDate && !errors.birthDate && formData.birthDate && <Check size={12} className="text-emerald-500" />}
-            </label>
-            <div className="relative group">
-              <Calendar className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthDate && errors.birthDate ? 'text-rose-500' : touched.birthDate && !errors.birthDate ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
-              <input
-                id="birthDate"
-                type="date"
-                aria-invalid={!!(touched.birthDate && errors.birthDate)}
-                aria-describedby={touched.birthDate && errors.birthDate ? "date-error" : undefined}
-                className={getInputFieldClasses('birthDate')}
-                value={formData.birthDate}
-                onBlur={() => handleBlur('birthDate')}
-                onChange={(e) => handleChange('birthDate', e.target.value)}
-              />
-              {touched.birthDate && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  {errors.birthDate ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
+              <div className="relative">
+                <label className="block text-[10px] uppercase tracking-[0.3em] text-slate-500 mb-3 ml-1 font-mono font-bold">Таны Орд</label>
+                <div className="relative group">
+                  <select
+                    className="w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-white appearance-none cursor-pointer"
+                    value={formData.sunSign}
+                    onChange={(e) => handleChange('sunSign', e.target.value)}
+                  >
+                    {ZODIAC_SIGNS.map(s => <option key={s} value={s}>{SIGN_NAMES_MN[s] || s}</option>)}
+                  </select>
+                  <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-600 group-focus-within:text-indigo-400" size={14} />
                 </div>
-              )}
-            </div>
-            <AnimatePresence>
-              {touched.birthDate && errors.birthDate && (
-                <motion.p 
-                  id="date-error" 
-                  initial={{ opacity: 0, height: 0, y: -10 }} 
-                  animate={{ opacity: 1, height: 'auto', y: 0 }} 
-                  exit={{ opacity: 0, height: 0, y: -10 }}
-                  className="text-[10px] text-rose-500 mt-2 ml-1 font-mono flex items-center gap-1"
-                >
-                  <AlertCircle size={10} /> {errors.birthDate}
-                </motion.p>
-              )}
-            </AnimatePresence>
-          </div>
-          
-          <div className="relative">
-            <label htmlFor="birthTime" className="block text-[10px] uppercase tracking-[0.3em] text-slate-400 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
-              Төрсөн Цаг <span className="text-indigo-400/50 italic">(Нарийвчлал)</span>
-              {touched.birthTime && !errors.birthTime && formData.birthTime && <Check size={12} className="text-emerald-500" />}
-            </label>
-            <div className="relative group">
-              <Clock className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthTime && errors.birthTime ? 'text-rose-500' : touched.birthTime && !errors.birthTime && formData.birthTime ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
-              <input
-                id="birthTime"
-                type="time"
-                className={getInputFieldClasses('birthTime' as any)}
-                value={formData.birthTime}
-                onBlur={() => handleBlur('birthTime')}
-                onChange={(e) => handleChange('birthTime', e.target.value)}
-              />
-              {touched.birthTime && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  {errors.birthTime ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
-                </div>
-              )}
-            </div>
-            <AnimatePresence>
-              {touched.birthTime && errors.birthTime && (
-                <motion.p 
-                  initial={{ opacity: 0, height: 0, y: -10 }} 
-                  animate={{ opacity: 1, height: 'auto', y: 0 }} 
-                  exit={{ opacity: 0, height: 0, y: -10 }}
-                  className="text-[10px] text-rose-500 mt-2 ml-1 font-mono flex items-center gap-1"
-                >
-                  <AlertCircle size={10} /> {errors.birthTime}
-                </motion.p>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* Sign & Location Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="relative">
-            <label className="block text-[10px] uppercase tracking-[0.3em] text-slate-500 mb-3 ml-1 font-mono font-bold">Таны Орд</label>
-            <div className="relative group">
-              <select
-                required
-                className="w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500/50 transition-colors text-white appearance-none cursor-pointer"
-                value={formData.sunSign}
-                onChange={(e) => handleChange('sunSign', e.target.value)}
-              >
-                {ZODIAC_SIGNS.map(s => <option key={s} value={s}>{SIGN_NAMES_MN[s] || s}</option>)}
-              </select>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-600 group-focus-within:text-indigo-400">
-                <Calendar size={14} />
               </div>
-            </div>
-          </div>
-          
-          <div className="relative">
-            <label className="block text-[10px] uppercase tracking-[0.3em] text-slate-500 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
-              Төрсөн Газар
-              {touched.birthLocation && !errors.birthLocation && formData.birthLocation && <Check size={12} className="text-emerald-500" />}
-            </label>
-            <div className="relative group">
-              <MapPin className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthLocation && errors.birthLocation ? 'text-rose-500' : touched.birthLocation && !errors.birthLocation && formData.birthLocation ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
-              <input
-                type="text"
-                placeholder="Хот, Улс"
-                className={getInputFieldClasses('birthLocation')}
-                value={formData.birthLocation}
-                onBlur={() => handleBlur('birthLocation')}
-                onChange={(e) => handleChange('birthLocation', e.target.value)}
-              />
-              {touched.birthLocation && formData.birthLocation && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  {errors.birthLocation ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
-                </div>
-              )}
-            </div>
-            <AnimatePresence>
-              {touched.birthLocation && errors.birthLocation && (
-                <motion.p 
-                  initial={{ opacity: 0, height: 0, y: -10 }} 
-                  animate={{ opacity: 1, height: 'auto', y: 0 }} 
-                  exit={{ opacity: 0, height: 0, y: -10 }}
-                  className="text-[10px] text-rose-500 mt-2 ml-1 font-mono"
-                >
-                  {errors.birthLocation}
-                </motion.p>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        <motion.button
-          type="submit"
-          whileHover={isValid ? { scale: 1.02 } : {}}
-          whileTap={isValid ? { scale: 0.98 } : {}}
-          disabled={!isValid}
-          className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${isValid ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'}`}
-        >
-          {isValid ? (
-            <>
-              <Sparkles size={16} className="animate-pulse" />
-              ЗУРАГЛАЛ ГАРГАХ
-            </>
-          ) : (
-            'Мэдээллээ бүрэн оруулна уу'
+            </motion.div>
           )}
-        </motion.button>
+
+          {currentStep === 2 && (
+            <motion.div
+              key="step2"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6"
+            >
+              <div className="relative">
+                <label className="block text-[10px] uppercase tracking-[0.3em] text-slate-400 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
+                  Төрсөн Огноо
+                </label>
+                <div className="relative group">
+                  <Calendar className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthDate && errors.birthDate ? 'text-rose-500' : touched.birthDate && !errors.birthDate ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
+                  <input
+                    type="date"
+                    className={getInputFieldClasses('birthDate')}
+                    value={formData.birthDate}
+                    onBlur={() => handleBlur('birthDate')}
+                    onChange={(e) => handleChange('birthDate', e.target.value)}
+                  />
+                </div>
+                <ErrorMsg touched={touched.birthDate} error={errors.birthDate} />
+              </div>
+              
+              <div className="relative">
+                <label className="block text-[10px] uppercase tracking-[0.3em] text-slate-400 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
+                  Төрсөн Цаг
+                </label>
+                <div className="relative group">
+                  <Clock className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthTime && errors.birthTime ? 'text-rose-500' : touched.birthTime && !errors.birthTime ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
+                  <input
+                    type="time"
+                    className={getInputFieldClasses('birthTime' as any)}
+                    value={formData.birthTime}
+                    onBlur={() => handleBlur('birthTime')}
+                    onChange={(e) => handleChange('birthTime', e.target.value)}
+                  />
+                </div>
+                <ErrorMsg touched={touched.birthTime} error={errors.birthTime} />
+              </div>
+            </motion.div>
+          )}
+
+          {currentStep === 3 && (
+            <motion.div
+              key="step3"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6"
+            >
+              <div className="relative">
+                <label className="block text-[10px] uppercase tracking-[0.3em] text-slate-500 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
+                  Төрсөн Газар
+                </label>
+                <div className="relative group">
+                  <MapPin className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthLocation && errors.birthLocation ? 'text-rose-500' : touched.birthLocation && !errors.birthLocation && formData.birthLocation ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
+                  <input
+                    type="text"
+                    placeholder="Хот, Улс"
+                    className={getInputFieldClasses('birthLocation')}
+                    value={formData.birthLocation}
+                    onBlur={() => handleBlur('birthLocation')}
+                    onChange={(e) => handleChange('birthLocation', e.target.value)}
+                  />
+                  {touched.birthLocation && formData.birthLocation && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      {errors.birthLocation ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
+                    </div>
+                  )}
+                </div>
+                <ErrorMsg touched={touched.birthLocation} error={errors.birthLocation} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex gap-4 pt-4">
+          {currentStep > 1 && (
+            <button
+              type="button"
+              onClick={prevStep}
+              className="flex-1 py-4 rounded-xl border border-white/5 bg-white/5 text-slate-400 font-bold text-xs uppercase tracking-widest hover:bg-white/10 transition-all"
+            >
+              Буцах
+            </button>
+          )}
+          
+          {currentStep < 3 ? (
+            <button
+              type="button"
+              onClick={nextStep}
+              className="flex-[2] py-4 rounded-xl bg-indigo-600 text-white font-bold text-xs uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-600/20"
+            >
+              Үргэлжлүүлэх
+            </button>
+          ) : (
+            <motion.button
+              type="submit"
+              whileHover={isValid ? { scale: 1.02 } : {}}
+              whileTap={isValid ? { scale: 0.98 } : {}}
+              disabled={!isValid}
+              className={`flex-[2] font-bold py-4 rounded-xl shadow-lg transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2 ${isValid ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'}`}
+            >
+              <Sparkles size={16} className={isValid ? "animate-pulse" : ""} />
+              ЗУРАГЛАЛ ГАРГАХ
+            </motion.button>
+          )}
+        </div>
       </form>
     </motion.div>
+  );
+}
+
+function ErrorMsg({ touched, error }: { touched?: boolean, error?: string }) {
+  return (
+    <AnimatePresence>
+      {touched && error && (
+        <motion.p 
+          initial={{ opacity: 0, height: 0, y: -10 }} 
+          animate={{ opacity: 1, height: 'auto', y: 0 }} 
+          exit={{ opacity: 0, height: 0, y: -10 }}
+          className="text-[10px] text-rose-500 mt-2 ml-1 font-mono flex items-center gap-1"
+        >
+          <AlertCircle size={10} /> {error}
+        </motion.p>
+      )}
+    </AnimatePresence>
   );
 }

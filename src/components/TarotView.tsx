@@ -4,6 +4,8 @@ import { Sparkles, RefreshCw } from 'lucide-react';
 import { TarotCard } from '../types';
 import { getTarotReading } from '../services/geminiService';
 
+import { toast } from '../lib/toast';
+
 export default function TarotView() {
   const [card, setCard] = useState<TarotCard | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,6 +24,8 @@ export default function TarotView() {
       console.error(e);
       if (e.message === 'QUOTA_EXCEEDED') {
         setError('QUOTA_EXCEEDED');
+      } else {
+        toast.error('Карт сугалахад алдаа гарлаа. Ододтой холбогдож чадсангүй.');
       }
     } finally {
       setLoading(false);
@@ -102,6 +106,10 @@ export default function TarotView() {
                       src={card.imageUrl} 
                       alt={card.name}
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=400&h=700&auto=format&fit=crop';
+                      }}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-110"
                     />
                     {/* Shimmer Effect */}

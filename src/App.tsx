@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Moon, Sun, Star, Sparkles, Navigation, ChevronRight, User, ShieldCheck, Heart, Zap, ShoppingBag, Hash } from 'lucide-react';
+import { Moon, Sun, Star, Sparkles, Navigation, ChevronRight, User, ShieldCheck, Heart, Zap, ShoppingBag, Hash, Check, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { ZodiacSign, HoroscopeData, UserProfile, ShopProduct, SIGN_NAMES_MN, BirthChartInterpretation } from './types';
 import { fetchDailyHoroscope, interpretBirthChart } from './services/geminiService';
 import CelestialBackground from './components/CelestialBackground';
@@ -15,6 +15,11 @@ import NumerologyView from './components/NumerologyView';
 import GeneralInfoModal from './components/GeneralInfoModal';
 import OnboardingModal from './components/OnboardingModal';
 import SettingsModal from './components/SettingsModal';
+import ZodiacWheel from './components/ZodiacWheel';
+import QuotaStatus from './components/QuotaStatus';
+
+import Toaster, { Toast } from './components/Toaster';
+import { toastEvent, toast } from './lib/toast';
 
 export default function App() {
   const [selectedSign, setSelectedSign] = useState<ZodiacSign | null>(null);
@@ -30,19 +35,39 @@ export default function App() {
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [infoModal, setInfoModal] = useState<{ isOpen: boolean, title: string, type: string }>({
     isOpen: false,
     title: '',
     type: ''
   });
 
+  const addToast = (message: string, type: 'error' | 'success' | 'info') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => removeToast(id), 5000);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  useEffect(() => {
+    const unsubscribe = toastEvent.subscribe(addToast);
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     const saved = localStorage.getItem('astra_profile');
     if (saved) {
-      const profile = JSON.parse(saved);
+      const profile: UserProfile = JSON.parse(saved);
       setUserProfile(profile);
       setSelectedSign(profile.sunSign);
-      generateChart(profile);
+      if (profile.astroData) {
+        setChartInterpretation(profile.astroData);
+      } else {
+        generateChart(profile);
+      }
     } else {
       // Check if onboarding was already shown
       const onboardingShown = localStorage.getItem('astra_onboarding_shown');
@@ -68,6 +93,16 @@ export default function App() {
     if (query.get('session_id')) {
       setIsPremium(true);
       localStorage.setItem('astra_premium', 'true');
+      
+      // Also update the persisted profile if it exists
+      const saved = localStorage.getItem('astra_profile');
+      if (saved) {
+        const profile: UserProfile = JSON.parse(saved);
+        profile.isPremium = true;
+        localStorage.setItem('astra_profile', JSON.stringify(profile));
+        setUserProfile(profile);
+      }
+      
       // Clean up URL
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -77,7 +112,7 @@ export default function App() {
     if (selectedSign) {
       loadHoroscope(selectedSign);
     }
-  }, [selectedSign]);
+  }, [selectedSign, chartInterpretation]);
 
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
@@ -97,6 +132,8 @@ export default function App() {
       console.error(e);
       if (e.message === 'QUOTA_EXCEEDED') {
         setError('QUOTA_EXCEEDED');
+      } else {
+        toast.error('Зурхай ачаалахад алдаа гарлаа. Та дараа дахин оролдоно уу.');
       }
     } finally {
       setLoading(false);
@@ -118,32 +155,65 @@ export default function App() {
       const session = await response.json();
       if (session.url) {
         window.location.href = session.url;
+      } else {
+        toast.error('Төлбөрийн сесс үүсгэхэд алдаа гарлаа.');
       }
     } catch (error) {
       console.error(error);
-      alert('Төлбөрийн системд алдаа гарлаа.');
+      toast.error('Төлбөрийн системд алдаа гарлаа. Сүлжээгээ шалгана уу.');
     } finally {
       setPurchaseLoading(false);
     }
   };
 
+  const handleRetryQuota = () => {
+    setError(null);
+    if (selectedSign) loadHoroscope(selectedSign);
+    if (userProfile && !chartInterpretation) generateChart(userProfile);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'chart' && !userProfile) {
+      setTimeout(() => {
+        const form = document.getElementById('chart-form-section');
+        if (form) {
+          form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 300);
+    }
+  }, [activeTab, userProfile]);
+
   const saveProfile = (profile: UserProfile) => {
-    setUserProfile(profile);
-    localStorage.setItem('astra_profile', JSON.stringify(profile));
+    const updatedProfile = { ...profile, isPremium };
+    setUserProfile(updatedProfile);
+    localStorage.setItem('astra_profile', JSON.stringify(updatedProfile));
     setSelectedSign(profile.sunSign);
-    generateChart(profile);
+    generateChart(updatedProfile);
   };
 
   const generateChart = async (profile: UserProfile) => {
+    if (profile.astroData) {
+      setChartInterpretation(profile.astroData);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const result = await interpretBirthChart(profile.name, profile.birthDate, profile.birthTime, profile.birthLocation);
       setChartInterpretation(result);
+      
+      // Update profile with astroData and persist
+      const updatedProfile = { ...profile, astroData: result };
+      setUserProfile(updatedProfile);
+      localStorage.setItem('astra_profile', JSON.stringify(updatedProfile));
+      toast.success('Төрсний зурхай амжилттай үүслээ.');
     } catch (e: any) {
       console.error(e);
       if (e.message === 'QUOTA_EXCEEDED') {
         setError('QUOTA_EXCEEDED');
+      } else {
+        toast.error('Төрсний зурхай тодорхойлоход алдаа гарлаа.');
       }
     } finally {
       setLoading(false);
@@ -180,6 +250,13 @@ export default function App() {
         </div>
 
         <div className="flex items-center space-x-3 md:space-x-6">
+          <QuotaStatus 
+            error={error} 
+            isPremium={isPremium} 
+            onRetry={handleRetryQuota} 
+            onUpgrade={() => setSubModalOpen(true)}
+          />
+          
           <div className="hidden md:flex items-center space-x-2 bg-indigo-500/10 px-3 py-1.5 rounded-full border border-indigo-500/20">
             <div className="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
             <span className="text-[10px] uppercase tracking-widest text-indigo-300 font-bold">LIVE</span>
@@ -219,28 +296,82 @@ export default function App() {
         <AnimatePresence>
           {error === 'QUOTA_EXCEEDED' && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="mb-12 p-8 glass-card border-indigo-500/30 bg-indigo-500/5 text-center relative overflow-hidden"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="mb-12 p-8 md:p-12 glass-card border-amber-500/30 bg-amber-500/5 text-center relative overflow-hidden group"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-500/10 to-transparent animate-shimmer pointer-events-none" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(245,158,11,0.1),transparent_70%)]" />
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-500/5 to-transparent animate-shimmer pointer-events-none" />
+              
               <div className="relative z-10">
-                <Sparkles className="w-12 h-12 text-astra-gold mx-auto mb-4 animate-pulse" />
-                <h3 className="text-2xl font-serif text-white mb-2 italic">Сансрын энерги цэнэг авч байна</h3>
-                <p className="text-slate-400 max-w-md mx-auto text-sm leading-relaxed mb-6">
-                  Өнөөдрийн тэнгэрийн мэдээллийн урсгал дээд цэгтээ хүрлээ. Оддын энерги дахин боловсруулагдах хүртэл хэсэг хүлээгээд дахин оролдоно уу.
-                </p>
-                <button 
-                  onClick={() => {
-                    setError(null);
-                    if (selectedSign) loadHoroscope(selectedSign);
-                    if (userProfile) generateChart(userProfile);
-                  }}
-                  className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-indigo-600/20"
-                >
-                  Дахин оролдох
-                </button>
+                <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-8 border border-amber-500/30 shadow-2xl shadow-amber-500/20">
+                  <Clock className="w-10 h-10 text-amber-500 animate-pulse" />
+                </div>
+                
+                <h3 className="text-2xl md:text-4xl font-serif text-white mb-6 italic tracking-tight">Сансрын энерги түр саатлаа</h3>
+                
+                <div className="space-y-4 mb-10">
+                  <p className="text-slate-300 max-w-xl mx-auto text-sm md:text-lg leading-relaxed">
+                    Үнэгүй хувилбарын өдрийн ашиглалтын хязгаар (Quota) хэтэрсэн байна. Оддын энерги <span className="text-amber-500 font-bold block md:inline mt-2 md:mt-0 px-3 py-1 bg-amber-500/10 rounded-full border border-amber-500/20">маргааш өглөө 09:00 цагт</span> бүрэн шинэчлэгдэх болно.
+                  </p>
+                  
+                  {/* Countdown Timer */}
+                  <div className="flex items-center justify-center gap-4 text-xs font-mono">
+                    <div className="flex flex-col items-center p-3 bg-white/5 rounded-lg border border-white/10 min-w-[70px]">
+                      <span className="text-amber-500 text-lg font-bold">{Math.max(0, 23 - new Date().getHours() + (new Date().getHours() < 9 ? -15 : 9))}</span>
+                      <span className="text-slate-500 uppercase tracking-tighter">Цаг</span>
+                    </div>
+                    <div className="text-slate-700 text-xl font-bold">:</div>
+                    <div className="flex flex-col items-center p-3 bg-white/5 rounded-lg border border-white/10 min-w-[70px]">
+                      <span className="text-amber-500 text-lg font-bold">{59 - new Date().getMinutes()}</span>
+                      <span className="text-slate-500 uppercase tracking-tighter">Минут</span>
+                    </div>
+                  </div>
+
+                  {!isPremium && (
+                    <p className="text-indigo-400 text-xs md:text-sm font-medium uppercase tracking-[0.1em] pt-4">
+                      VIP гишүүн болсноор хязгааргүй ашиглах боломжтой.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                  <button 
+                    onClick={handleRetryQuota}
+                    className="w-full sm:w-auto px-10 py-5 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl text-xs font-bold uppercase tracking-widest transition-all shadow-xl shadow-amber-600/20 flex items-center justify-center gap-3 group-hover:scale-105 active:scale-95"
+                  >
+                    <RefreshCw size={18} />
+                    Одоо Дахин оролдох
+                  </button>
+                  
+                  {!isPremium && (
+                    <button 
+                      onClick={() => setSubModalOpen(true)}
+                      className="w-full sm:w-auto px-10 py-5 bg-astra-gold hover:bg-yellow-400 text-cosmos-black rounded-2xl text-xs font-bold uppercase tracking-widest transition-all shadow-xl shadow-yellow-500/20 flex items-center justify-center gap-3 active:scale-95"
+                    >
+                      <User size={18} />
+                      VIP багц аваарай
+                    </button>
+                  )}
+
+                  <button 
+                    onClick={() => setError(null)}
+                    className="w-full sm:w-auto px-10 py-5 bg-white/5 hover:bg-white/10 text-slate-400 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all border border-white/10"
+                  >
+                    Хаах
+                  </button>
+                </div>
+
+                <div className="mt-10 pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-center gap-6">
+                  <div className="flex items-center gap-3 text-slate-500 text-[10px] uppercase tracking-widest bg-slate-950/40 px-4 py-2 rounded-full border border-white/5">
+                    <AlertCircle size={14} className="text-amber-500/50" />
+                    <span>Reset: 24h Window</span>
+                  </div>
+                  <p className="text-[10px] text-slate-600 uppercase tracking-[0.2em] font-mono">
+                    Хэрэв та өөрийн API түлхүүрийг ашиглаж байгаа бол тохиргоогоо шалгана уу.
+                  </p>
+                </div>
               </div>
             </motion.div>
           )}
@@ -333,7 +464,36 @@ export default function App() {
           {activeTab === 'chart' && (
             <div className="space-y-12">
               {!userProfile ? (
-                <BirthChartForm onSave={saveProfile} />
+                <div className="max-w-4xl mx-auto space-y-12">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="text-center py-16 px-8 glass-card border-indigo-500/30 bg-indigo-500/5 relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(79,70,229,0.1),transparent_70%)] pointer-events-none" />
+                    <Sparkles className="w-16 h-16 text-astra-gold mx-auto mb-6 animate-pulse" />
+                    <h2 className="text-3xl md:text-5xl font-serif text-white mb-6 italic tracking-tight">Сансрын зураглалаа нээх</h2>
+                    <p className="text-slate-400 max-w-xl mx-auto text-lg leading-relaxed mb-8">
+                      Таны төрсөн цаг, байршил ододтой хэрхэн холбогдож буйг олж мэднэ үү. Өөрийн мэдээллийг оруулснаар 
+                      <span className="text-indigo-400 font-bold"> хувь тавилангийн нарийн оношлогоо</span> болон 
+                      <span className="text-astra-gold font-bold"> хувийн өдөр тутмын зурхайг</span> идэвхжүүлэх боломжтой.
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-6 text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold">
+                      <div className="flex items-center gap-2">
+                        <Check size={14} className="text-emerald-500" /> Төрсөн цагийн нөлөө
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check size={14} className="text-emerald-500" /> Гараг эрхсийн байрлал
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check size={14} className="text-emerald-500" /> Мандах ордын тайлал
+                      </div>
+                    </div>
+                  </motion.div>
+                  <div id="chart-form-section">
+                    <BirthChartForm onSave={saveProfile} />
+                  </div>
+                </div>
               ) : (
                 <div className="max-w-3xl mx-auto">
                   <div className="flex justify-between items-center mb-8 px-4">
@@ -361,8 +521,19 @@ export default function App() {
                     <motion.div
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="space-y-8"
+                      className="space-y-12"
                     >
+                      {/* Visual Chart Wheel */}
+                      <div className="py-12 glass-card bg-indigo-950/20 border-white/5 relative overflow-hidden">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-indigo-500/5 blur-[100px] pointer-events-none" />
+                        <h4 className="text-[10px] uppercase tracking-[0.4em] text-center text-indigo-400 mb-12 font-mono font-bold">Таны Сансрын Зураглал</h4>
+                        <ZodiacWheel 
+                          sunSign={chartInterpretation.sun.sign} 
+                          moonSign={chartInterpretation.moon.sign} 
+                          risingSign={chartInterpretation.rising?.sign} 
+                        />
+                      </div>
+
                       {/* Detailed Breakdown Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <ChartSignCard 
@@ -422,7 +593,7 @@ export default function App() {
           )}
 
           {activeTab === 'compatibility' && (
-            isPremium ? <CompatibilityView /> : (
+            isPremium ? <CompatibilityView userSign={userProfile?.sunSign} /> : (
               <div className="text-center py-24 glass-card border-white/5 bg-slate-900/40 max-w-2xl mx-auto">
                  <ShieldCheck size={48} className="mx-auto text-indigo-500 mb-6 opacity-40 hover:opacity-100 transition-opacity" />
                  <h3 className="text-2xl font-light text-white mb-4 italic">Премиум Онцлог</h3>
@@ -607,7 +778,12 @@ export default function App() {
           localStorage.setItem('astra_user_profile', JSON.stringify(profile));
           if (profile.sunSign) setSelectedSign(profile.sunSign);
         }}
+        isPremium={isPremium}
+        error={error}
+        onRetry={handleRetryQuota}
       />
+
+      <Toaster toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

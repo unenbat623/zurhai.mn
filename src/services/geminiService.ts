@@ -17,6 +17,11 @@ async function callGemini<T>(key: string, fn: () => Promise<T>, useCache = true)
     if (useCache) {
       cache[key] = { data: result, timestamp: Date.now() };
     }
+    
+    // Increment local quota estimation
+    const current = parseInt(localStorage.getItem('astra_quota_usage') || '0');
+    localStorage.setItem('astra_quota_usage', (current + 1).toString());
+    
     return result;
   } catch (error: any) {
     console.error("Gemini API Error:", error);
@@ -80,7 +85,8 @@ export async function fetchDailyCompatibility(sign1: ZodiacSign, sign2: ZodiacSi
     const prompt = `Analyze the DAILY astrological compatibility between ${sign1} and ${sign2} for today, ${dateKey}.
     The response must be in Mongolian.
     How do today's planetary positions affect their interaction?
-    Provide a score from 0-100, a summary of today's energy, 3 temporary strengths for today, and 2 specific challenges they might face today with solutions.`;
+    Provide a score from 0-100, a summary of today's energy, 3 temporary strengths for today, and 2 specific challenges they might face today with solutions.
+    Also provide breakdown scores (0-100) for: communication, passion, emotional connection, shared values, and trust.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -105,9 +111,20 @@ export async function fetchDailyCompatibility(sign1: ZodiacSign, sign2: ZodiacSi
                 required: ["title", "explanation", "solution"]
               }, 
               description: "2 detailed challenges for today in Mongolian" 
+            },
+            breakdown: {
+              type: Type.OBJECT,
+              properties: {
+                communication: { type: Type.NUMBER },
+                passion: { type: Type.NUMBER },
+                emotional: { type: Type.NUMBER },
+                values: { type: Type.NUMBER },
+                trust: { type: Type.NUMBER }
+              },
+              required: ["communication", "passion", "emotional", "values", "trust"]
             }
           },
-          required: ["score", "summary", "strengths", "challenges"]
+          required: ["score", "summary", "strengths", "challenges", "breakdown"]
         }
       }
     });
@@ -119,7 +136,8 @@ export async function fetchCompatibility(sign1: ZodiacSign, sign2: ZodiacSign): 
   return callGemini(`compatibility-${sign1}-${sign2}`, async () => {
     const prompt = `Analyze the astrological compatibility between ${sign1} and ${sign2} for a romantic or deep partnership.
     The response must be in Mongolian.
-    Provide a score from 0-100, a summary, 3 strengths, and 2 detailed challenges with explanations and potential solutions.`;
+    Provide a score from 0-100, a summary, 3 strengths, and 2 detailed challenges with explanations and potential solutions.
+    Also provide breakdown scores (0-100) for: communication, passion, emotional connection, shared values, and trust.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -144,9 +162,20 @@ export async function fetchCompatibility(sign1: ZodiacSign, sign2: ZodiacSign): 
                 required: ["title", "explanation", "solution"]
               }, 
               description: "2 detailed challenges in Mongolian" 
+            },
+            breakdown: {
+              type: Type.OBJECT,
+              properties: {
+                communication: { type: Type.NUMBER },
+                passion: { type: Type.NUMBER },
+                emotional: { type: Type.NUMBER },
+                values: { type: Type.NUMBER },
+                trust: { type: Type.NUMBER }
+              },
+              required: ["communication", "passion", "emotional", "values", "trust"]
             }
           },
-          required: ["score", "summary", "strengths", "challenges"]
+          required: ["score", "summary", "strengths", "challenges", "breakdown"]
         }
       }
     });
@@ -155,44 +184,69 @@ export async function fetchCompatibility(sign1: ZodiacSign, sign2: ZodiacSign): 
   });
 }
 
+const TAROT_FALLBACK_CARDS = [
+  { name: "Тэнэг (The Fool)", englishName: "The Fool", meaning: "Шинэ эхлэл, гэнэн итгэл, эрх чөлөө.", advice: "Өөртөө итгэж, шинэ адал явдалд зоригтой гар.", arcana: "Major" as const },
+  { name: "Илбэчин (The Magician)", englishName: "The Magician", meaning: "Ур чадвар, хүч чадал, бүтээлч байдал.", advice: "Танд бүх нөөц боломж бий, үйлдлээ эхэл.", arcana: "Major" as const },
+  { name: "Дээд Гэлэнмаа (The High Priestess)", englishName: "The High Priestess", meaning: "Зөн совин, далд мэдлэг, нууцлаг байдал.", advice: "Дотоод дуу хоолойгоо сонс.", arcana: "Major" as const },
+  { name: "Хатан хаан (The Empress)", englishName: "The Empress", meaning: "Өсөлт, элбэг дэлбэг байдал, хайр халамж.", advice: "Бүтээлч байдлаа хөгжүүлж, байгальтай ойр бай.", arcana: "Major" as const },
+  { name: "Эзэн хаан (The Emperor)", englishName: "The Emperor", meaning: "Эрх мэдэл, бүтэц, тогтвортой байдал.", advice: "Дэг журам тогтоож, хариуцлагатай бай.", arcana: "Major" as const },
+  { name: "Амрагууд (The Lovers)", englishName: "The Lovers", meaning: "Хайр дурлал, сонголт, эв нэгдэл.", advice: "Зүрх сэтгэлээ дагаж шийдвэр гарга.", arcana: "Major" as const }
+];
+
+function generateTarotImageUrl(englishName: string): string {
+  const seed = Math.floor(Math.random() * 9999999);
+  const stylePrompt = encodeURIComponent(`mystic tarot card ${englishName}, sleek cosmic aesthetic, floating symbols, deep indigo and golden glows, celestial background, highly detailed digital illustration, spiritual art`);
+  return `https://image.pollinations.ai/prompt/${stylePrompt}?width=400&height=700&nologo=true&seed=${seed}`;
+}
+
 export async function getTarotReading(): Promise<TarotCard> {
   // Tarot results are randomized, so we don't cache them the same way
-  return callGemini(`tarot-${new Date().getHours()}`, async () => {
-    const prompt = `Provide a single tarot card pull for today's guidance.
-    The response must be in Mongolian.
-    Select a random card from the Rider-Waite tradition. Provide name, meaning, and advice.
-    Also provide an English name for the card in a separate field called 'englishName' for internal image generation.`;
+  try {
+    return await callGemini(`tarot-${new Date().getHours()}`, async () => {
+      const prompt = `Provide a single tarot card pull for today's guidance.
+      The response must be in Mongolian.
+      Select a random card from the Rider-Waite tradition. Provide name, meaning, and advice.
+      Also provide an English name for the card in a separate field called 'englishName' for internal image generation.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING, description: "Card name in Mongolian" },
-            englishName: { type: Type.STRING, description: "Simple card name in English, e.g. 'The Fool', 'Three of Cups'" },
-            meaning: { type: Type.STRING, description: "Card meaning in Mongolian" },
-            advice: { type: Type.STRING, description: "Daily advice in Mongolian" },
-            arcana: { type: Type.STRING, enum: ["Major", "Minor"] }
-          },
-          required: ["name", "englishName", "meaning", "advice", "arcana"]
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING, description: "Card name in Mongolian" },
+              englishName: { type: Type.STRING, description: "Simple card name in English, e.g. 'The Fool', 'Three of Cups'" },
+              meaning: { type: Type.STRING, description: "Card meaning in Mongolian" },
+              advice: { type: Type.STRING, description: "Daily advice in Mongolian" },
+              arcana: { type: Type.STRING, enum: ["Major", "Minor"] }
+            },
+            required: ["name", "englishName", "meaning", "advice", "arcana"]
+          }
         }
-      }
-    });
+      });
 
-    const rawData = JSON.parse(response.text);
-    
-    // Create a stylized image URL using the English name
-    const stylePrompt = encodeURIComponent(`mystic tarot card ${rawData.englishName}, sleek cosmic aesthetic, floating symbols, deep indigo and golden glows, celestial background, highly detailed digital illustration, spiritual art`);
-    const imageUrl = `https://image.pollinations.ai/prompt/${stylePrompt}?width=400&height=700&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+      const rawData = JSON.parse(response.text);
+      const imageUrl = generateTarotImageUrl(rawData.englishName);
 
-    return {
-      ...rawData,
-      imageUrl
-    } as TarotCard;
-  });
+      return {
+        ...rawData,
+        imageUrl
+      } as TarotCard;
+    }, false); 
+  } catch (error: any) {
+    console.warn("Falling back to local tarot data:", error);
+    if (error.message === 'QUOTA_EXCEEDED' || error.message?.includes('429')) {
+      const randomIndex = Math.floor(Math.random() * TAROT_FALLBACK_CARDS.length);
+      const fallback = TAROT_FALLBACK_CARDS[randomIndex];
+      return {
+        ...fallback,
+        imageUrl: generateTarotImageUrl(fallback.englishName)
+      } as TarotCard;
+    }
+    throw error;
+  }
 }
 
 export async function fetchDailyHoroscope(sign: ZodiacSign, birthChartData?: BirthChartInterpretation): Promise<HoroscopeData> {
