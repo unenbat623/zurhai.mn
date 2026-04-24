@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Bell, Shield, Moon, LogOut, Save, Check, Zap, Clock, RefreshCw, AlertCircle } from 'lucide-react';
 import { UserProfile, SIGN_NAMES_MN, ZODIAC_SIGNS } from '../types';
+import { toast } from '../lib/toast';
 
 interface Props {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export default function SettingsModal({ isOpen, onClose, userProfile, onUpdatePr
     if (formData.name && formData.sunSign) {
       onUpdateProfile(formData as UserProfile);
       setShowSaved(true);
+      toast.success('Өөрчлөлтүүд амжилттай хадгалагдлаа');
       setTimeout(() => setShowSaved(false), 2000);
     }
   };

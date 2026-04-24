@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Hash, Sparkles, Star, Target, Info, Download, Loader2 } from 'lucide-react';
+import { Hash, Sparkles, Star, Target, Info, Download, Loader2, Moon } from 'lucide-react';
 import { NumerologyData, UserProfile } from '../types';
 import { fetchNumerology } from '../services/geminiService';
 import html2canvas from 'html2canvas';
@@ -140,7 +140,7 @@ export default function NumerologyView({ userProfile }: Props) {
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 blur-[100px] -z-10" />
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-600/5 blur-[100px] -z-10" />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
               <div className="text-center group">
                 <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-indigo-500/10 border-2 border-indigo-500/30 mb-4 relative group-hover:scale-110 transition-transform duration-500">
                   <span className="text-5xl font-serif font-bold text-white sleek-glow">{data.lifePathNumber}</span>
@@ -158,6 +158,15 @@ export default function NumerologyView({ userProfile }: Props) {
                 <h3 className="text-[9px] uppercase font-bold tracking-[0.3em] text-purple-400 mb-1">Хувь Тавилан</h3>
                 <p className="text-[10px] text-slate-500 font-mono">Destiny Number</p>
               </div>
+
+              <div className="text-center group">
+                <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 mb-4 relative group-hover:scale-110 transition-transform duration-500">
+                  <span className="text-5xl font-serif font-bold text-white sleek-glow">{data.soulUrgeNumber}</span>
+                  <div className="absolute -inset-2 border border-emerald-500/20 rounded-full animate-ping opacity-10" style={{ animationDelay: '1s' }} />
+                </div>
+                <h3 className="text-[9px] uppercase font-bold tracking-[0.3em] text-emerald-400 mb-1">Дотоод Хүсэл</h3>
+                <p className="text-[10px] text-slate-500 font-mono">Soul Urge</p>
+              </div>
             </div>
 
             <div className="space-y-8 mb-12">
@@ -173,6 +182,13 @@ export default function NumerologyView({ userProfile }: Props) {
                    <Target size={12} /> Нэрний Нууц Утга
                 </h5>
                 <p className="text-sm text-slate-300 leading-relaxed">{data.destinyMeaning}</p>
+              </div>
+
+              <div className="bg-white/5 p-6 rounded-2xl border border-white/5">
+                <h5 className="text-[10px] uppercase font-bold tracking-[0.2em] text-emerald-400 mb-2 flex items-center gap-2">
+                   <Moon size={12} /> Сэтгэлийн Дуудлага
+                </h5>
+                <p className="text-sm text-slate-300 leading-relaxed">{data.soulUrgeMeaning}</p>
               </div>
             </div>
 
@@ -197,7 +213,7 @@ export default function NumerologyView({ userProfile }: Props) {
                   Сансрын Зөвлөгөө
                 </h5>
                 <p className="text-sm text-slate-400 leading-relaxed italic">
-                  "{data.cosmicAdvise}"
+                  "{data.cosmicAdvice}"
                 </p>
               </div>
             </div>

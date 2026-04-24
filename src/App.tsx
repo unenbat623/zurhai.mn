@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Moon, Sun, Star, Sparkles, Navigation, ChevronRight, User, ShieldCheck, Heart, Zap, ShoppingBag, Hash, Check, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { ZodiacSign, HoroscopeData, UserProfile, ShopProduct, SIGN_NAMES_MN, BirthChartInterpretation } from './types';
 import { fetchDailyHoroscope, interpretBirthChart } from './services/geminiService';
+import { useAppStore } from './store/useAppStore';
 import CelestialBackground from './components/CelestialBackground';
 import ZodiacSignGrid from './components/ZodiacSignGrid';
 import HoroscopeDisplay from './components/HoroscopeDisplay';
@@ -22,13 +23,14 @@ import Toaster, { Toast } from './components/Toaster';
 import { toastEvent, toast } from './lib/toast';
 
 export default function App() {
+  const { activeTab, setActiveTab } = useAppStore();
   const [selectedSign, setSelectedSign] = useState<ZodiacSign | null>(null);
   const [horoscope, setHoroscope] = useState<HoroscopeData | null>(null);
+  const [horoscopeCache, setHoroscopeCache] = useState<Record<string, HoroscopeData>>({});
   const [loading, setLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [chartInterpretation, setChartInterpretation] = useState<BirthChartInterpretation | null>(null);
   const [isSubModalOpen, setSubModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'horoscope' | 'chart' | 'compatibility' | 'tarot' | 'shop' | 'numerology'>('horoscope');
   const [isPremium, setIsPremium] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -58,53 +60,88 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem('astra_profile');
-    if (saved) {
-      const profile: UserProfile = JSON.parse(saved);
-      setUserProfile(profile);
-      setSelectedSign(profile.sunSign);
-      if (profile.astroData) {
-        setChartInterpretation(profile.astroData);
-      } else {
-        generateChart(profile);
-      }
-    } else {
-      // Check if onboarding was already shown
-      const onboardingShown = localStorage.getItem('astra_onboarding_shown');
-      if (!onboardingShown) {
+    // Robust profile loading
+    const initializeApp = () => {
+      try {
+        const saved = localStorage.getItem('astra_profile');
+        if (saved) {
+          const profile: UserProfile = JSON.parse(saved);
+          if (profile && typeof profile === 'object' && profile.name) {
+            // Recover astroData from individual key if missing in profile
+            if (!profile.astroData) {
+              const savedAstro = localStorage.getItem('astroData');
+              if (savedAstro) {
+                try {
+                  profile.astroData = JSON.parse(savedAstro);
+                } catch (e) {
+                  console.warn("Could not parse astroData", e);
+                }
+              }
+            }
+
+            setUserProfile(profile);
+            if (profile.sunSign) setSelectedSign(profile.sunSign);
+            
+            if (profile.astroData) {
+              setChartInterpretation(profile.astroData);
+            } else if (profile.sunSign) {
+              generateChart(profile);
+            }
+          } else {
+            throw new Error("Invalid profile structure");
+          }
+        } else {
+          // Check onboarding
+          const onboardingShown = localStorage.getItem('astra_onboarding_shown');
+          if (!onboardingShown) {
+            setIsOnboardingOpen(true);
+          }
+        }
+      } catch (err) {
+        console.error("Profile initialization failed:", err);
+        // Clear potentially corrupted data
+        localStorage.removeItem('astra_profile');
         setIsOnboardingOpen(true);
       }
-    }
-    
-    const premiumStatus = localStorage.getItem('astra_premium') === 'true';
-    setIsPremium(premiumStatus);
 
-    const savedTheme = localStorage.getItem('astra_theme') as 'light' | 'dark' | null;
-    if (savedTheme) {
-      setTheme(savedTheme);
-      if (savedTheme === 'dark') document.documentElement.classList.add('dark');
-      else document.documentElement.classList.remove('dark');
-    } else {
-      document.documentElement.classList.add('dark');
-    }
+      try {
+        const premiumStatus = localStorage.getItem('astra_premium') === 'true';
+        setIsPremium(premiumStatus);
+
+        const savedTheme = localStorage.getItem('astra_theme') as 'light' | 'dark' | null;
+        if (savedTheme) {
+          setTheme(savedTheme);
+          if (savedTheme === 'dark') document.documentElement.classList.add('dark');
+          else document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (err) {
+        console.warn("Preference loading failed:", err);
+        document.documentElement.classList.add('dark');
+      }
+    };
+
+    initializeApp();
 
     // Handle Stripe redirect success
-    const query = new URLSearchParams(window.location.search);
-    if (query.get('session_id')) {
-      setIsPremium(true);
-      localStorage.setItem('astra_premium', 'true');
-      
-      // Also update the persisted profile if it exists
-      const saved = localStorage.getItem('astra_profile');
-      if (saved) {
-        const profile: UserProfile = JSON.parse(saved);
-        profile.isPremium = true;
-        localStorage.setItem('astra_profile', JSON.stringify(profile));
-        setUserProfile(profile);
+    try {
+      const query = new URLSearchParams(window.location.search);
+      if (query.get('session_id')) {
+        setIsPremium(true);
+        localStorage.setItem('astra_premium', 'true');
+        
+        const saved = localStorage.getItem('astra_profile');
+        if (saved) {
+          const profile: UserProfile = JSON.parse(saved);
+          profile.isPremium = true;
+          localStorage.setItem('astra_profile', JSON.stringify(profile));
+          setUserProfile(profile);
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
-      
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (err) {
+      console.error("Stripe callback handling failed:", err);
     }
   }, []);
 
@@ -122,21 +159,35 @@ export default function App() {
     else document.documentElement.classList.remove('dark');
   };
 
-  const loadHoroscope = async (sign: ZodiacSign) => {
-    setLoading(true);
-    setError(null);
+  const loadHoroscope = async (sign: ZodiacSign, isSilent = false) => {
+    const cacheKey = `${sign}-${chartInterpretation ? 'personalized' : 'general'}`;
+    
+    // If we have it in cache, use it immediately
+    if (horoscopeCache[cacheKey]) {
+      setHoroscope(horoscopeCache[cacheKey]);
+      if (!isSilent) return;
+    }
+
+    if (!isSilent) {
+      setLoading(true);
+      setError(null);
+    }
+
     try {
       const data = await fetchDailyHoroscope(sign, chartInterpretation || undefined);
       setHoroscope(data);
+      setHoroscopeCache(prev => ({ ...prev, [cacheKey]: data }));
     } catch (e: any) {
       console.error(e);
-      if (e.message === 'QUOTA_EXCEEDED') {
-        setError('QUOTA_EXCEEDED');
-      } else {
-        toast.error('Зурхай ачаалахад алдаа гарлаа. Та дараа дахин оролдоно уу.');
+      if (!isSilent) {
+        if (e.message === 'QUOTA_EXCEEDED') {
+          setError('QUOTA_EXCEEDED');
+        } else {
+          toast.error('Зурхай ачаалахад алдаа гарлаа. Та дараа дахин оролдоно уу.');
+        }
       }
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
@@ -173,14 +224,29 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (activeTab === 'chart' && !userProfile) {
-      setTimeout(() => {
-        const form = document.getElementById('chart-form-section');
-        if (form) {
-          form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const timer = setTimeout(() => {
+      let targetId = '';
+      if (activeTab === 'horoscope') targetId = 'horoscope-content';
+      else if (activeTab === 'chart') targetId = userProfile ? 'chart-content' : 'chart-form-section';
+      else if (activeTab === 'compatibility') targetId = 'compatibility-content';
+      else if (activeTab === 'shop') targetId = 'shop-content';
+
+      if (targetId) {
+        const element = document.getElementById(targetId);
+        if (element) {
+          const headerOffset = 100;
+          const elementPosition = element.getBoundingClientRect().top;
+          const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: 'smooth'
+          });
         }
-      }, 300);
-    }
+      }
+    }, 350); // Timeout to allow for AnimatePresence transitions
+    
+    return () => clearTimeout(timer);
   }, [activeTab, userProfile]);
 
   const saveProfile = (profile: UserProfile) => {
@@ -207,6 +273,7 @@ export default function App() {
       const updatedProfile = { ...profile, astroData: result };
       setUserProfile(updatedProfile);
       localStorage.setItem('astra_profile', JSON.stringify(updatedProfile));
+      localStorage.setItem('astroData', JSON.stringify(result));
       toast.success('Төрсний зурхай амжилттай үүслээ.');
     } catch (e: any) {
       console.error(e);
@@ -217,6 +284,13 @@ export default function App() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const prefetchHoroscope = (sign: ZodiacSign) => {
+    const cacheKey = `${sign}-${chartInterpretation ? 'personalized' : 'general'}`;
+    if (sign !== selectedSign && !horoscopeCache[cacheKey]) {
+      loadHoroscope(sign, true);
     }
   };
 
@@ -233,19 +307,42 @@ export default function App() {
             </div>
             <span className="text-lg md:text-xl font-serif font-bold tracking-tight text-white italic">ASTRA<span className="text-indigo-400 font-sans font-light not-italic">AI</span></span>
           </div>
-          <div className="hidden lg:flex space-x-6 text-sm font-medium text-slate-400">
-            <button 
-              onClick={() => setActiveTab('horoscope')}
-              className={`transition-colors py-5 ${activeTab === 'horoscope' ? 'text-white border-b-2 border-indigo-500' : 'hover:text-white'}`}
-            >
-              Хянах самбар
-            </button>
-            <button 
-              onClick={() => setActiveTab('chart')}
-              className={`transition-colors py-5 ${activeTab === 'chart' ? 'text-white border-b-2 border-indigo-500' : 'hover:text-white'}`}
-            >
-              Зурхай
-            </button>
+          <div className="hidden lg:flex items-center h-full ml-12">
+            <div className="flex bg-white/5 p-1 rounded-full border border-white/5 space-x-1">
+              {[
+                { id: 'horoscope', label: 'Самбар' },
+                { id: 'chart', label: 'Зурхай' }
+              ].map((tab) => (
+                <button 
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`relative px-6 py-2 flex items-center text-[10px] uppercase tracking-[0.2em] font-bold transition-all duration-500 rounded-full group ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  <span className="relative z-10 transition-transform duration-300 group-active:scale-95">{tab.label}</span>
+                  {activeTab === tab.id && (
+                    <motion.div 
+                      layoutId="header-nav-active-pill"
+                      className="absolute inset-0 bg-gradient-to-r from-indigo-600/30 to-purple-600/30 border border-indigo-500/40 rounded-full shadow-[0_0_25px_rgba(99,102,241,0.25)] overflow-hidden"
+                      transition={{ type: "spring", bounce: 0.15, duration: 0.6 }}
+                    >
+                      <motion.div 
+                        animate={{ 
+                          opacity: [0.3, 0.6, 0.3],
+                          scale: [1, 1.2, 1],
+                          x: ['-100%', '100%']
+                        }}
+                        transition={{ 
+                          duration: 3, 
+                          repeat: Infinity, 
+                          ease: "linear" 
+                        }}
+                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12"
+                      />
+                    </motion.div>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -455,9 +552,9 @@ export default function App() {
             <div className="space-y-12">
               <div className="text-center">
                 <h3 className="text-xs uppercase tracking-[0.5em] text-slate-500 mb-8">Ивээл ордоо сонгоно уу</h3>
-                <ZodiacSignGrid onSelect={setSelectedSign} selectedSign={selectedSign} />
+                <ZodiacSignGrid onSelect={setSelectedSign} onHover={prefetchHoroscope} selectedSign={selectedSign} />
               </div>
-              <HoroscopeDisplay data={horoscope} isLoading={loading} isPersonalized={!!chartInterpretation} />
+              <HoroscopeDisplay data={horoscope} isLoading={loading} isPersonalized={!!chartInterpretation} chartData={chartInterpretation || undefined} />
             </div>
           )}
 
@@ -774,9 +871,22 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         userProfile={userProfile}
         onUpdateProfile={(profile) => {
-          setUserProfile(profile);
-          localStorage.setItem('astra_user_profile', JSON.stringify(profile));
-          if (profile.sunSign) setSelectedSign(profile.sunSign);
+          // Keep astroData when updating other profile fields if it matches the current details
+          const finalProfile = { ...profile };
+          if (!finalProfile.astroData && chartInterpretation) {
+            finalProfile.astroData = chartInterpretation;
+          }
+
+          setUserProfile(finalProfile);
+          localStorage.setItem('astra_profile', JSON.stringify(finalProfile));
+          
+          if (finalProfile.astroData) {
+            localStorage.setItem('astroData', JSON.stringify(finalProfile.astroData));
+            setChartInterpretation(finalProfile.astroData);
+          }
+          
+          if (finalProfile.sunSign) setSelectedSign(finalProfile.sunSign);
+          toast.success('Astro Data has been saved');
         }}
         isPremium={isPremium}
         error={error}
@@ -789,16 +899,38 @@ export default function App() {
 }
 
 function ChartSignCard({ title, sign, meaning, icon, color }: { title: string, sign: string, meaning: string, icon: React.ReactNode, color: string }) {
+  const [isHovered, setIsHovered] = useState(false);
+
   return (
-    <div className="glass-card p-6 border-white/5 bg-slate-900/50 flex flex-col items-center text-center group hover:border-indigo-500/30 transition-all duration-500">
+    <div 
+      className="glass-card p-6 border-white/5 bg-slate-900/50 flex flex-col items-center text-center group hover:border-indigo-500/30 transition-all duration-500 relative"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${color} flex items-center justify-center text-white mb-4 shadow-lg group-hover:scale-110 transition-transform duration-500`}>
         {icon}
       </div>
       <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-1 font-mono font-bold">{title}</div>
       <h3 className="text-2xl font-serif text-white mb-4 italic">{sign}</h3>
-      <p className="text-xs text-slate-400 leading-relaxed line-clamp-3 group-hover:line-clamp-none transition-all duration-500">
+      <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">
         {meaning}
       </p>
+
+      <AnimatePresence>
+        {isHovered && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 5, scale: 0.95 }}
+            className="absolute z-50 bottom-full left-0 right-0 mb-4 p-4 glass-card bg-slate-900 border-indigo-500/30 shadow-2xl pointer-events-none"
+          >
+            <p className="text-xs text-slate-200 leading-relaxed text-left">
+              {meaning}
+            </p>
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-900 border-r border-b border-indigo-500/30 rotate-45" />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -810,21 +942,70 @@ function TabButton({ active, onClick, label, icon, isLocked }: { active: boolean
       role="tab"
       aria-selected={active}
       aria-label={`${label}${isLocked ? ' (Premium)' : ''}`}
-      className={`relative px-3 sm:px-6 py-2.5 sm:py-3 rounded-xl flex items-center gap-2 sm:gap-3 transition-all duration-500 overflow-hidden whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-indigo-500/50 snap-center ${
-        active ? 'text-indigo-400' : 'text-slate-400 hover:text-white'
+      className={`relative px-5 sm:px-10 py-4 rounded-2xl flex items-center gap-2 sm:gap-3 transition-all duration-700 whitespace-nowrap focus:outline-none snap-center group ${
+        active ? 'text-white' : 'text-slate-500 hover:text-slate-200'
       }`}
     >
       {active && (
         <motion.div 
-          layoutId="tab-active"
-          className="absolute inset-0 bg-indigo-500/10 border border-indigo-500/20 rounded-xl"
+          layoutId="tab-active-pill-bg"
+          className="absolute inset-0 bg-white/[0.05] backdrop-blur-[12px] rounded-2xl border border-white/10 shadow-[inset_0_0_25px_rgba(255,255,255,0.03),0_10px_30px_-10px_rgba(0,0,0,0.5)] overflow-hidden"
+          initial={false}
+          transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+        >
+          <motion.div 
+            animate={{ 
+              x: ['-100%', '200%'],
+              opacity: [0, 0.5, 0]
+            }}
+            transition={{ 
+              duration: 2.5, 
+              repeat: Infinity, 
+              ease: "easeInOut" 
+            }}
+            className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/5 to-transparent -skew-x-12"
+          />
+        </motion.div>
+      )}
+      
+      {active && (
+        <motion.div 
+          layoutId="tab-active-glow-aura"
+          className="absolute inset-0 bg-indigo-500/15 blur-[35px] rounded-full scale-100 opacity-60"
+          transition={{ type: "spring", bounce: 0, duration: 1 }}
         />
       )}
-      <span className={`relative z-10 transition-transform duration-500 ${active ? 'scale-110' : 'scale-100 opacity-60'}`}>
+
+      {active && (
+        <div className="absolute inset-x-0 bottom-0 top-0 overflow-hidden rounded-2xl pointer-events-none">
+          <motion.div 
+            layoutId="tab-active-side-lines"
+            className="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-400 to-transparent shadow-[0_0_15px_rgba(129,140,248,0.8)]"
+            transition={{ type: "spring", bounce: 0.2, duration: 0.7 }}
+          />
+          <motion.div 
+            layoutId="tab-active-top-glow"
+            className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"
+            transition={{ type: "spring", bounce: 0.2, duration: 0.7 }}
+          />
+        </div>
+      )}
+
+      <span className={`relative z-10 transition-all duration-700 ${active ? 'scale-115 text-indigo-400 drop-shadow-[0_0_15px_rgba(99,102,241,0.7)]' : 'scale-100 group-hover:scale-110 group-hover:text-slate-100'}`}>
         {icon}
       </span>
-      <span className="relative z-10 text-[10px] md:text-xs font-bold uppercase tracking-widest">{label}</span>
-      {isLocked && <Zap size={10} className="relative z-10 text-astra-gold ml-1 animate-pulse" />}
+      <span className={`relative z-10 text-[10px] md:text-[11px] font-bold uppercase tracking-[0.3em] transition-all duration-500 ${active ? 'opacity-100 text-white translate-y-0' : 'opacity-40 group-hover:opacity-100 text-slate-400'}`}>
+        {label}
+      </span>
+      {isLocked && (
+        <motion.div
+          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="relative z-10 text-astra-gold ml-1"
+        >
+          <Zap size={10} />
+        </motion.div>
+      )}
     </button>
   );
 }

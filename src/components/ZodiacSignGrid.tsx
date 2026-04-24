@@ -4,10 +4,11 @@ import { ZODIAC_SIGNS, SIGN_DATES, ZodiacSign, SIGN_NAMES_MN } from '../types';
 
 interface Props {
   onSelect: (sign: ZodiacSign) => void;
+  onHover?: (sign: ZodiacSign) => void;
   selectedSign: ZodiacSign | null;
 }
 
-export default function ZodiacSignGrid({ onSelect, selectedSign }: Props) {
+export default function ZodiacSignGrid({ onSelect, onHover, selectedSign }: Props) {
   const containerVariants = {
     initial: {},
     hover: {}
@@ -19,21 +20,44 @@ export default function ZodiacSignGrid({ onSelect, selectedSign }: Props) {
   };
 
   return (
-    <div 
-      className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 p-4"
-      role="radiogroup"
-      aria-label="Зурхайн орд сонгох"
-    >
-      {ZODIAC_SIGNS.map((sign) => (
-        <motion.button
-          key={sign}
-          role="radio"
-          aria-checked={selectedSign === sign}
-          aria-label={SIGN_NAMES_MN[sign]}
-          initial="initial"
-          whileHover="hover"
-          whileTap="tap"
-          variants={{
+    <div className="flex flex-col gap-6">
+      {!selectedSign && (
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center py-4 px-6 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 flex items-center justify-center gap-3 self-center"
+        >
+          <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+          <span className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-indigo-400">
+            Үргэлжлүүлэхийн тулд өөрийн ордоо сонгоно уу
+          </span>
+          <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+        </motion.div>
+      )}
+      
+      <div 
+        className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 p-4"
+        role="radiogroup"
+        aria-label="Зурхайн орд сонгох"
+      >
+        {ZODIAC_SIGNS.map((sign) => (
+          <motion.button
+            key={sign}
+            role="radio"
+            aria-checked={selectedSign === sign}
+            aria-label={SIGN_NAMES_MN[sign]}
+            initial="initial"
+            whileHover="hover"
+            whileTap="tap"
+            animate={!selectedSign ? {
+              scale: [1, 1.02, 1],
+              transition: { 
+                repeat: Infinity, 
+                duration: 4, 
+                delay: ZODIAC_SIGNS.indexOf(sign) * 0.1 
+              }
+            } : { scale: 1 }}
+            variants={{
             hover: {
               scale: 1.05,
               y: -10,
@@ -41,6 +65,7 @@ export default function ZodiacSignGrid({ onSelect, selectedSign }: Props) {
             },
             tap: { scale: 0.95 }
           }}
+          onMouseEnter={() => onHover?.(sign)}
           onClick={() => onSelect(sign)}
           className={`relative group flex flex-col items-center justify-center p-5 rounded-3xl transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
             selectedSign === sign 
@@ -85,6 +110,7 @@ export default function ZodiacSignGrid({ onSelect, selectedSign }: Props) {
           </div>
         </motion.button>
       ))}
+      </div>
     </div>
   );
 }

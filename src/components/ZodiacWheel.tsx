@@ -2,7 +2,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ZodiacSign, ZODIAC_SIGNS, SIGN_NAMES_MN } from '../types';
-import { Sun, Moon, Navigation } from 'lucide-react';
+import { Sun, Moon, Navigation, Flame, Mountain, Wind, Droplets } from 'lucide-react';
 
 interface Props {
   sunSign: string;
@@ -10,13 +10,40 @@ interface Props {
   risingSign?: string;
 }
 
+const SIGN_INFO: Record<ZodiacSign, { element: 'Fire' | 'Earth' | 'Air' | 'Water', modality: 'Cardinal' | 'Fixed' | 'Mutable' }> = {
+  'Aries': { element: 'Fire', modality: 'Cardinal' },
+  'Taurus': { element: 'Earth', modality: 'Fixed' },
+  'Gemini': { element: 'Air', modality: 'Mutable' },
+  'Cancer': { element: 'Water', modality: 'Cardinal' },
+  'Leo': { element: 'Fire', modality: 'Fixed' },
+  'Virgo': { element: 'Earth', modality: 'Mutable' },
+  'Libra': { element: 'Air', modality: 'Cardinal' },
+  'Scorpio': { element: 'Water', modality: 'Fixed' },
+  'Sagittarius': { element: 'Fire', modality: 'Mutable' },
+  'Capricorn': { element: 'Earth', modality: 'Cardinal' },
+  'Aquarius': { element: 'Air', modality: 'Fixed' },
+  'Pisces': { element: 'Water', modality: 'Mutable' }
+};
+
+const ELEMENT_STYLES = {
+  Fire: { color: 'text-orange-500', bg: 'bg-orange-500/10', icon: <Flame size={8} /> },
+  Earth: { color: 'text-emerald-500', bg: 'bg-emerald-500/10', icon: <Mountain size={8} /> },
+  Air: { color: 'text-sky-400', bg: 'bg-sky-400/10', icon: <Wind size={8} /> },
+  Water: { color: 'text-indigo-400', bg: 'bg-indigo-400/10', icon: <Droplets size={8} /> }
+};
+
+const MODALITY_LABELS = {
+  Cardinal: 'C',
+  Fixed: 'F',
+  Mutable: 'M'
+};
+
 export default function ZodiacWheel({ sunSign, moonSign, risingSign }: Props) {
   const getAngle = (sign: string) => {
     // Standard zodiac order starting from Aries at 0 degrees
-    // (Aries is usually at the 9 o'clock position in traditional charts, but we'll normalize to 0 = Top)
     const index = ZODIAC_SIGNS.findIndex(s => s.toLowerCase() === sign.toLowerCase());
     if (index === -1) return 0;
-    return (index * 30) - 90; // -90 to start Aries at the top or appropriate offset
+    return (index * 30) - 90; 
   };
 
   const sunAngle = getAngle(sunSign);
@@ -37,20 +64,31 @@ export default function ZodiacWheel({ sunSign, moonSign, risingSign }: Props) {
           const x = 50 + 42 * Math.cos(rad);
           const y = 50 + 42 * Math.sin(rad);
           
+          const info = SIGN_INFO[sign];
+          const style = ELEMENT_STYLES[info.element];
+          
           return (
             <div 
               key={sign}
-              className="absolute text-[8px] font-bold text-slate-600 uppercase tracking-tighter"
+              className="absolute flex flex-col items-center gap-0.5 group"
               style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
             >
-              {SIGN_NAMES_MN[sign].slice(0, 3)}
+              {/* Element Icon and Modality Label */}
+              <div className={`flex items-center gap-0.5 px-1 py-0.5 rounded-full ${style.bg} ${style.color} scale-75 opacity-60 group-hover:opacity-100 transition-opacity`}>
+                {style.icon}
+                <span className="text-[5px] font-bold leading-none">{MODALITY_LABELS[info.modality]}</span>
+              </div>
+              
+              <div className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter group-hover:text-slate-200 transition-colors">
+                {SIGN_NAMES_MN[sign].slice(0, 3)}
+              </div>
             </div>
           );
         })}
 
         {/* Inner Grid/Circles */}
-        <div className="absolute inset-[15%] border border-indigo-500/10 rounded-full" />
-        <div className="absolute inset-[30%] border border-indigo-500/5 rounded-full" />
+        <div className="absolute inset-[18%] border border-indigo-500/10 rounded-full" />
+        <div className="absolute inset-[32%] border border-indigo-500/5 rounded-full" />
         
         {/* Planet Markers */}
         <PlanetMarker angle={sunAngle} color="text-amber-400" icon={<Sun size={14} />} label="Наран" />

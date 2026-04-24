@@ -124,5 +124,7 @@ export interface NumerologyData {
   destinyNumber: number;
   destinyMeaning: string;
   traits: string[];
-  cosmicAdvise: string;
+  cosmicAdvice: string;
+  soulUrgeNumber: number;
+  soulUrgeMeaning: string;
 }

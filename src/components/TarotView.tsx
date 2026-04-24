@@ -25,7 +25,8 @@ export default function TarotView() {
       if (e.message === 'QUOTA_EXCEEDED') {
         setError('QUOTA_EXCEEDED');
       } else {
-        toast.error('Карт сугалахад алдаа гарлаа. Ододтой холбогдож чадсангүй.');
+        toast.error('Карт сугалахад алдаа гарлаа. Ододтой холбогдож чадсангүй. Та түр хүлээгээд дахин оролдоно уу.');
+        setError('GENERIC_ERROR');
       }
     } finally {
       setLoading(false);
@@ -40,11 +41,17 @@ export default function TarotView() {
       </div>
 
       <div className="flex flex-col items-center gap-12">
-        {error === 'QUOTA_EXCEEDED' ? (
+        {error === 'QUOTA_EXCEEDED' || error === 'GENERIC_ERROR' ? (
           <div className="text-center py-12 glass-card border-indigo-500/30 bg-indigo-500/5 w-full">
             <Sparkles size={48} className="mx-auto text-astra-gold mb-6 animate-pulse" />
-            <h3 className="text-2xl font-serif text-white mb-4 italic">Сансрын энерги цэнэг авч байна</h3>
-            <p className="text-slate-500 mb-8 max-w-md mx-auto text-sm">Тарот энергийн урсгал түр хугацаанд саатлаа. Одод дахин нэгдэх хүртэл хүлээгээд үзээрэй.</p>
+            <h3 className="text-2xl font-serif text-white mb-4 italic">
+              {error === 'QUOTA_EXCEEDED' ? 'Сансрын энерги цэнэг авч байна' : 'Ододтой холбогдоход саатал гарлаа'}
+            </h3>
+            <p className="text-slate-500 mb-8 max-w-md mx-auto text-sm">
+              {error === 'QUOTA_EXCEEDED' 
+                ? 'Тарот энергийн урсгал түр хугацаанд саатлаа. Одод дахин нэгдэх хүртэл хүлээгээд үзээрэй.' 
+                : 'Одод болон гариг эрхэсийн байрлал тогтворгүй байна. Түр хүлээгээд дахин оролдоно уу.'}
+            </p>
             <button 
               onClick={pullCard}
               className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-indigo-600/20"

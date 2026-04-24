@@ -7,13 +7,44 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const cache: Record<string, { data: any; timestamp: number }> = {};
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
-async function callGemini<T>(key: string, fn: () => Promise<T>, useCache = true): Promise<T> {
+async function callGemini<T>(key: string, fn: () => Promise<T>, useCache = true, maxRetries = 3): Promise<T> {
   if (useCache && cache[key] && (Date.now() - cache[key].timestamp < CACHE_TTL)) {
     return cache[key].data;
   }
 
+  const executeWithRetry = async (): Promise<T> => {
+    let lastError: any;
+    for (let i = 0; i <= maxRetries; i++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+        // Check for transient errors (429 Rate Limit, 5xx Server Errors, Network issues)
+        const isTransient = 
+          error?.message?.includes("429") || 
+          error?.status === 429 || 
+          error?.code === 429 ||
+          error?.message?.toLowerCase().includes("fetch") ||
+          error?.message?.toLowerCase().includes("network") ||
+          error?.message?.includes("500") ||
+          error?.message?.includes("502") ||
+          error?.message?.includes("503") ||
+          error?.status >= 500;
+
+        if (isTransient && i < maxRetries) {
+          const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+          console.warn(`Transient error calling Gemini (${error?.status || error?.message}). Retrying in ${Math.round(delay)}ms... (Attempt ${i + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError;
+  };
+
   try {
-    const result = await fn();
+    const result = await executeWithRetry();
     if (useCache) {
       cache[key] = { data: result, timestamp: Date.now() };
     }
@@ -24,9 +55,9 @@ async function callGemini<T>(key: string, fn: () => Promise<T>, useCache = true)
     
     return result;
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    console.error("Gemini API Error after retries:", error);
     
-    // Check for 429 Quota Exceeded
+    // Check for 429 Quota Exceeded if still failing after retries
     if (error?.message?.includes("429") || error?.status === 429 || (error?.code === 429)) {
        throw new Error("QUOTA_EXCEEDED");
     }
@@ -46,14 +77,17 @@ export async function fetchNumerology(name: string, birthDate: string): Promise<
     Calculations needed:
     1. Life Path Number: Sum all digits of the birth date, reduce to single digit (1-9) or master numbers (11, 22, 33).
     2. Destiny Number (Expression Number): Convert each letter of the full name to a number using the Pythagorean system (A=1, B=2, ..., I=9, J=1, etc.), sum them, and reduce.
+    3. Soul Urge Number (Heart's Desire): Sum of all vowels in the full name using the same system.
 
     Provide:
     - lifePathNumber
     - lifePathMeaning: Detailed interpretation of the life path number in Mongolian.
     - destinyNumber
     - destinyMeaning: Detailed interpretation of how their name influences their path in Mongolian.
+    - soulUrgeNumber
+    - soulUrgeMeaning: Detailed interpretation of their inner desires and soul's core in Mongolian.
     - traits: 5 personality traits in Mongolian.
-    - cosmicAdvise: Short practical advice for their future in Mongolian.`;
+    - cosmicAdvice: Short practical advice for their future in Mongolian.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -67,10 +101,12 @@ export async function fetchNumerology(name: string, birthDate: string): Promise<
             lifePathMeaning: { type: Type.STRING },
             destinyNumber: { type: Type.NUMBER },
             destinyMeaning: { type: Type.STRING },
+            soulUrgeNumber: { type: Type.NUMBER },
+            soulUrgeMeaning: { type: Type.STRING },
             traits: { type: Type.ARRAY, items: { type: Type.STRING } },
-            cosmicAdvise: { type: Type.STRING }
+            cosmicAdvice: { type: Type.STRING }
           },
-          required: ["lifePathNumber", "lifePathMeaning", "destinyNumber", "destinyMeaning", "traits", "cosmicAdvise"]
+          required: ["lifePathNumber", "lifePathMeaning", "destinyNumber", "destinyMeaning", "soulUrgeNumber", "soulUrgeMeaning", "traits", "cosmicAdvice"]
         }
       }
     });
@@ -193,10 +229,18 @@ const TAROT_FALLBACK_CARDS = [
   { name: "Амрагууд (The Lovers)", englishName: "The Lovers", meaning: "Хайр дурлал, сонголт, эв нэгдэл.", advice: "Зүрх сэтгэлээ дагаж шийдвэр гарга.", arcana: "Major" as const }
 ];
 
+const PLACEHOLDER_TAROT_IMAGE = "https://images.unsplash.com/photo-1590059530519-2169f464010a?q=80&w=400&auto=format&fit=crop";
+
 function generateTarotImageUrl(englishName: string): string {
-  const seed = Math.floor(Math.random() * 9999999);
-  const stylePrompt = encodeURIComponent(`mystic tarot card ${englishName}, sleek cosmic aesthetic, floating symbols, deep indigo and golden glows, celestial background, highly detailed digital illustration, spiritual art`);
-  return `https://image.pollinations.ai/prompt/${stylePrompt}?width=400&height=700&nologo=true&seed=${seed}`;
+  try {
+    if (!englishName) return PLACEHOLDER_TAROT_IMAGE;
+    const seed = Math.floor(Math.random() * 9999999);
+    const stylePrompt = encodeURIComponent(`mystic tarot card ${englishName}, sleek cosmic aesthetic, floating symbols, deep indigo and golden glows, celestial background, highly detailed digital illustration, spiritual art`);
+    return `https://image.pollinations.ai/prompt/${stylePrompt}?width=400&height=700&nologo=true&seed=${seed}`;
+  } catch (error) {
+    console.error("Error generating tarot image URL:", error);
+    return PLACEHOLDER_TAROT_IMAGE;
+  }
 }
 
 export async function getTarotReading(): Promise<TarotCard> {
@@ -236,16 +280,13 @@ export async function getTarotReading(): Promise<TarotCard> {
       } as TarotCard;
     }, false); 
   } catch (error: any) {
-    console.warn("Falling back to local tarot data:", error);
-    if (error.message === 'QUOTA_EXCEEDED' || error.message?.includes('429')) {
-      const randomIndex = Math.floor(Math.random() * TAROT_FALLBACK_CARDS.length);
-      const fallback = TAROT_FALLBACK_CARDS[randomIndex];
-      return {
-        ...fallback,
-        imageUrl: generateTarotImageUrl(fallback.englishName)
-      } as TarotCard;
-    }
-    throw error;
+    console.warn("Falling back to local tarot data due to error:", error);
+    const randomIndex = Math.floor(Math.random() * TAROT_FALLBACK_CARDS.length);
+    const fallback = TAROT_FALLBACK_CARDS[randomIndex];
+    return {
+      ...fallback,
+      imageUrl: generateTarotImageUrl(fallback.englishName)
+    } as TarotCard;
   }
 }
 
@@ -258,10 +299,12 @@ export async function fetchDailyHoroscope(sign: ZodiacSign, birthChartData?: Bir
     - Moon in ${birthChartData.moon.sign}: ${birthChartData.moon.meaning}
     ${birthChartData.rising ? `- Rising in ${birthChartData.rising.sign}: ${birthChartData.rising.meaning}` : ''}
     
-    Please incorporate how today's planetary transits specifically interact with their natal positions (Sun, Moon, and Rising) to provide highly personalized advice.` : 'The tone should be mystic but practical. Provide high-quality content.'}
+    CRITICAL INSTRUCTION: You MUST explicitly mention the user's Sun sign (${birthChartData.sun.sign}), Moon sign (${birthChartData.moon.sign}), and ${birthChartData.rising ? `Rising sign (${birthChartData.rising.sign})` : 'other natal positions'} within the "dailyMessage" text. 
+    Explain how today's planetary transits specifically interact with these THREE key points of their cosmic blueprint.
+    The "mood" field should also be a creative, highly descriptive Mongolian phrase reflecting this specific energy mixture (e.g., "Наран мандах мэт эрч хүчтэй" or "Сарны зөн совин давамгайлсан").` : 'The tone should be mystic but practical. Provide high-quality content.'}
     
     The response must be in Mongolian.
-    Provide 3 sentences of general insight and 2 sentences of specific advice based on their transits.`;
+    Provide a cohesive paragraph (4-5 sentences) of deeply personalized insight.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",

@@ -18,6 +18,8 @@ export default function CompatibilityView({ userSign }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'general' | 'daily'>('general');
 
+  const [autoCalculate, setAutoCalculate] = useState(false);
+
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -48,6 +50,14 @@ export default function CompatibilityView({ userSign }: Props) {
       setLoading(false);
     }
   };
+
+  // Auto-calculate effect
+  useEffect(() => {
+    if (autoCalculate && sign1 && sign2 && !loading) {
+      handleCalculate();
+      setAutoCalculate(false);
+    }
+  }, [autoCalculate, sign1, sign2, loading]);
 
   const activeResult = mode === 'daily' ? dailyResult : generalResult;
 
@@ -359,25 +369,33 @@ export default function CompatibilityView({ userSign }: Props) {
 
       <div className="mt-20">
         <h3 className="text-xl font-serif text-white mb-8 text-center uppercase tracking-widest italic">Ордуудын тохирооны хүснэгт</h3>
-        <CompatibilityChart onSelectPair={(s1, s2) => {
-          setSign1(s1);
-          setSign2(s2);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          // Auto-calculate after a short delay for smoothness
-          setTimeout(() => {
-            const btn = document.getElementById('calculate-compatibility-btn');
-            if (btn) btn.click();
-          }, 600);
-        }} />
+        <CompatibilityChart 
+          activeSign1={sign1}
+          activeSign2={sign2}
+          onSelectPair={(s1, s2) => {
+            setSign1(s1);
+            setSign2(s2);
+            setAutoCalculate(true);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }} 
+        />
       </div>
     </div>
   );
 }
 
-function CompatibilityChart({ onSelectPair }: { onSelectPair: (s1: ZodiacSign, s2: ZodiacSign) => void }) {
+function CompatibilityChart({ 
+  onSelectPair, 
+  activeSign1, 
+  activeSign2 
+}: { 
+  onSelectPair: (s1: ZodiacSign, s2: ZodiacSign) => void,
+  activeSign1: ZodiacSign | null,
+  activeSign2: ZodiacSign | null
+}) {
   const [hovered, setHovered] = useState<{ s1: ZodiacSign, s2: ZodiacSign } | null>(null);
 
-  // Approximate compatibility logic for the chart
+  // More nuanced compatibility logic for the chart to make it visually interesting
   const getScore = (s1: ZodiacSign, s2: ZodiacSign) => {
     const elements: Record<ZodiacSign, 'Fire' | 'Earth' | 'Air' | 'Water'> = {
       Aries: 'Fire', Leo: 'Fire', Sagittarius: 'Fire',
@@ -386,49 +404,66 @@ function CompatibilityChart({ onSelectPair }: { onSelectPair: (s1: ZodiacSign, s
       Cancer: 'Water', Scorpio: 'Water', Pisces: 'Water'
     };
 
-    if (s1 === s2) return 95;
-    if (elements[s1] === elements[s2]) return 85;
+    if (s1 === s2) return 92;
     
-    const elementMatch: Record<string, number> = {
-      'Fire-Air': 80, 'Air-Fire': 80,
-      'Earth-Water': 80, 'Water-Earth': 80,
-      'Fire-Earth': 40, 'Earth-Fire': 40,
-      'Air-Water': 40, 'Water-Air': 40,
-      'Fire-Water': 30, 'Water-Fire': 30,
-      'Earth-Air': 30, 'Air-Earth': 30
+    const e1 = elements[s1];
+    const e2 = elements[s2];
+    
+    // Fundamental matches
+    if (e1 === e2) return 88;
+    
+    const matches: Record<string, number> = {
+      'Fire-Air': 85, 'Air-Fire': 85,
+      'Earth-Water': 82, 'Water-Earth': 82,
+      'Fire-Earth': 48, 'Earth-Fire': 48,
+      'Air-Water': 42, 'Water-Air': 42,
+      'Fire-Water': 28, 'Water-Fire': 28,
+      'Earth-Air': 32, 'Air-Earth': 32
     };
 
-    return elementMatch[`${elements[s1]}-${elements[s2]}`] || 60;
+    // Add some random variation based on sign positions for a "unique" feel
+    const combined = ZODIAC_SIGNS.indexOf(s1) + ZODIAC_SIGNS.indexOf(s2);
+    const bonus = combined % 7;
+
+    return (matches[`${e1}-${e2}`] || 60) + bonus;
   };
 
-  const getColor = (score: number) => {
-    if (score >= 90) return 'bg-emerald-500';
-    if (score >= 80) return 'bg-indigo-500';
-    if (score >= 60) return 'bg-indigo-500/50';
-    if (score >= 40) return 'bg-rose-500/50';
-    return 'bg-rose-500';
+  const getGradient = (score: number) => {
+    // Advanced celestial gradients with better depth
+    if (score >= 90) return 'linear-gradient(135deg, rgba(52, 211, 153, 0.45), rgba(16, 185, 129, 0.25))'; // Emerald
+    if (score >= 80) return 'linear-gradient(135deg, rgba(99, 102, 241, 0.45), rgba(79, 70, 229, 0.25))'; // Indigo
+    if (score >= 70) return 'linear-gradient(135deg, rgba(88, 28, 135, 0.4), rgba(139, 92, 246, 0.2))'; // Purple
+    if (score >= 50) return 'linear-gradient(135deg, rgba(234, 179, 8, 0.35), rgba(161, 98, 7, 0.15))'; // Gold/Amber
+    if (score >= 30) return 'linear-gradient(135deg, rgba(244, 63, 94, 0.3), rgba(225, 29, 72, 0.15))'; // Rose
+    return 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(51, 65, 85, 0.1))'; // Slate
   };
 
   return (
-    <div className="glass-card p-4 md:p-8 overflow-x-auto">
-      <div className="min-w-[600px]">
-        <div className="grid grid-cols-[100px_repeat(12,1fr)] gap-1">
+    <div className="glass-card p-4 md:p-10 overflow-x-auto shadow-2xl relative border-white/5 bg-slate-950/40">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[120px] -z-10" />
+      <div className="min-w-[700px]">
+        <div className="grid grid-cols-[110px_repeat(12,1fr)] gap-2">
           <div />
           {ZODIAC_SIGNS.map(s => (
-            <div key={s} className="text-[8px] font-bold text-slate-500 text-center uppercase tracking-tighter truncate">
+            <div 
+              key={s} 
+              className={`text-[10px] font-black text-center uppercase tracking-[0.2em] truncate pb-4 transition-all duration-300 ${hovered?.s2 === s || activeSign2 === s ? 'text-indigo-400 scale-110 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'text-slate-600'}`}
+            >
               {SIGN_NAMES_MN[s].slice(0, 3)}
             </div>
           ))}
           
           {ZODIAC_SIGNS.map(s1 => (
             <React.Fragment key={s1}>
-              <div className="text-[8px] font-bold text-slate-500 flex items-center uppercase tracking-tighter truncate pr-2">
+              <div className={`text-[11px] font-bold h-12 flex items-center uppercase tracking-widest truncate pr-4 border-r border-white/5 transition-all duration-300 ${hovered?.s1 === s1 || activeSign1 === s1 ? 'text-indigo-400 font-black' : 'text-slate-500'}`}>
                 {SIGN_NAMES_MN[s1]}
               </div>
               {ZODIAC_SIGNS.map(s2 => {
                 const score = getScore(s1, s2);
                 const isHoveredSide = hovered?.s1 === s1 || hovered?.s2 === s2;
-                const isExact = hovered?.s1 === s1 && hovered?.s2 === s2;
+                const isHoveredExact = hovered?.s1 === s1 && hovered?.s2 === s2;
+                const isActiveExact = activeSign1 === s1 && activeSign2 === s2;
+                const isAnySelected = isHoveredExact || isActiveExact;
                 
                 return (
                   <motion.button
@@ -436,18 +471,35 @@ function CompatibilityChart({ onSelectPair }: { onSelectPair: (s1: ZodiacSign, s
                     onMouseEnter={() => setHovered({ s1, s2 })}
                     onMouseLeave={() => setHovered(null)}
                     onClick={() => onSelectPair(s1, s2)}
-                    className={`h-8 rounded-sm ${getColor(score)} transition-all duration-300 relative group`}
+                    title={`${SIGN_NAMES_MN[s1]} & ${SIGN_NAMES_MN[s2]}: ${score}%`}
+                    className="h-12 rounded-lg transition-all duration-300 relative group border border-white/[0.03] overflow-hidden cursor-pointer"
+                    style={{ background: getGradient(score) }}
                     animate={{
-                      opacity: hovered ? (isHoveredSide ? 1 : 0.2) : 1,
-                      scale: isExact ? 1.2 : 1,
-                      zIndex: isExact ? 10 : 1
+                      opacity: hovered ? (isHoveredSide ? 1 : 0.3) : 0.85,
+                      scale: isAnySelected ? 1.1 : (isHoveredSide ? 1.02 : 1),
+                      zIndex: isAnySelected ? 20 : (isHoveredSide ? 10 : 1),
+                      boxShadow: isAnySelected 
+                        ? '0 0 30px rgba(99, 102, 241, 0.4)' 
+                        : (isHoveredSide ? '0 0 10px rgba(255, 255, 255, 0.03)' : 'none'),
+                      borderColor: isAnySelected ? 'rgba(99, 102, 241, 0.5)' : 'rgba(255, 255, 255, 0.03)'
                     }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                   >
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                      <span className="text-[8px] font-bold text-white leading-none whitespace-nowrap bg-black/80 px-1 py-0.5 rounded">
-                        {score}%
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className={`text-[11px] font-black leading-none transition-all duration-500 ${isAnySelected ? 'text-white scale-125 drop-shadow-sm' : 'text-white/20 group-hover:text-white/80'}`}>
+                        {score}
                       </span>
                     </div>
+                    {isAnySelected && (
+                      <motion.div 
+                        layoutId="active-cell-indicator-refined"
+                        className="absolute inset-0 border-2 border-indigo-400 rounded-lg bg-indigo-500/10 backdrop-blur-[1px]"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
                   </motion.button>
                 );
               })}
@@ -455,12 +507,12 @@ function CompatibilityChart({ onSelectPair }: { onSelectPair: (s1: ZodiacSign, s
           ))}
         </div>
         
-        <div className="mt-8 flex items-center justify-center gap-6 text-[9px] uppercase font-bold tracking-widest text-slate-500">
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-emerald-500" /> Төгс</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-indigo-500" /> Сайн</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-indigo-500/50" /> Дундаж</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-rose-500/50" /> Тааруу</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm bg-rose-500" /> Зөрчилтэй</div>
+        <div className="mt-12 flex flex-wrap items-center justify-center gap-10 text-[10px] uppercase font-bold tracking-[0.25em] text-slate-600 pt-8 border-t border-white/5">
+          <div className="flex items-center gap-3"><div className="w-5 h-5 rounded-lg bg-emerald-500/40 border border-emerald-500/20" /> Төгс (90%+)</div>
+          <div className="flex items-center gap-3"><div className="w-5 h-5 rounded-lg bg-indigo-500/40 border border-indigo-500/20" /> Маш сайн (80%+)</div>
+          <div className="flex items-center gap-3"><div className="w-5 h-5 rounded-lg bg-purple-500/40 border border-purple-500/20" /> Сайн (70%+)</div>
+          <div className="flex items-center gap-3"><div className="w-5 h-5 rounded-lg bg-amber-500/30 border border-amber-500/20" /> Дундаж (50%+)</div>
+          <div className="flex items-center gap-3"><div className="w-5 h-5 rounded-lg bg-rose-500/30 border border-rose-500/20" /> Сорилттой (30%+)</div>
         </div>
       </div>
     </div>

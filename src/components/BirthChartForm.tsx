@@ -2,7 +2,9 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, ZODIAC_SIGNS, SIGN_NAMES_MN } from '../types';
 import React, { useState, useEffect } from 'react';
-import { MapPin, Clock, Calendar, User, Check, AlertCircle, Sparkles, Mail } from 'lucide-react';
+import { MapPin, Clock, Calendar, User, Check, AlertCircle, Sparkles, Mail, Search, Loader2 } from 'lucide-react';
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 interface Props {
   onSave: (profile: UserProfile) => void;
@@ -21,6 +23,29 @@ export default function BirthChartForm({ onSave }: Props) {
   const [errors, setErrors] = useState<{ name?: string; birthDate?: string; birthLocation?: string; birthTime?: string }>({});
   const [touched, setTouched] = useState<{ name?: boolean; birthDate?: boolean; birthLocation?: boolean; birthTime?: boolean }>({});
   const [isValid, setIsValid] = useState(false);
+  
+  // Google Maps Integration State
+  const [locationSuggestions, setLocationSuggestions] = useState<{formatted_address: string, place_id: string}[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Load saved form data from localStorage
+  useEffect(() => {
+    const savedData = localStorage.getItem('astra_form_draft');
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        setFormData(prev => ({ ...prev, ...parsed }));
+      } catch (e) {
+        console.warn("Could not load form draft", e);
+      }
+    }
+  }, []);
+
+  // Save form data to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('astra_form_draft', JSON.stringify(formData));
+  }, [formData]);
 
   const validate = (name: string, value: string) => {
     let error = '';
@@ -35,9 +60,12 @@ export default function BirthChartForm({ onSave }: Props) {
       else {
         const date = new Date(value);
         const now = new Date();
+        const minDate = new Date();
+        minDate.setFullYear(now.getFullYear() - 120);
+        
         if (isNaN(date.getTime())) error = 'Буруу огноо байна';
         else if (date > now) error = 'Ирээдүйд төрөх боломжгүй';
-        else if (date < new Date('1900-01-01')) error = 'Огноо хэт эрт байна';
+        else if (date < minDate) error = 'Огноо хэт эрт байна (120 жилээс дээш)';
       }
     }
     if (name === 'birthTime') {
@@ -49,8 +77,7 @@ export default function BirthChartForm({ onSave }: Props) {
     if (name === 'birthLocation') {
       if (!value) error = 'Төрсөн газраа оруулна уу';
       else {
-        if (value.trim().length < 5) error = 'Байршлын нэр хэт богино байна';
-        else if (!value.includes(',')) error = 'Хот болон Улсыг таслалаар зааглаж оруулна уу (Жишээ: Улаанбаатар, Монгол)';
+        if (value.trim().length < 3) error = 'Байршлын нэр хэт богино байна';
       }
     }
     setErrors(prev => ({ ...prev, [name]: error }));
@@ -77,6 +104,57 @@ export default function BirthChartForm({ onSave }: Props) {
     if (name !== 'birthTime' && name !== 'sunSign') {
        setTouched(prev => ({ ...prev, [name]: true }));
     }
+
+    // Handle Google Maps Search
+    if (name === 'birthLocation' && GOOGLE_MAPS_API_KEY) {
+      if (value.length > 2) {
+        debouncedFetch(value);
+      } else {
+        setLocationSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }
+  };
+
+  const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+
+  const debouncedFetch = (query: string) => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    const timer = setTimeout(() => {
+      fetchGeocoding(query);
+    }, 500);
+    setDebounceTimer(timer);
+  };
+
+  const fetchGeocoding = async (query: string) => {
+    if (!GOOGLE_MAPS_API_KEY) return;
+    setIsSearching(true);
+    try {
+      // Using Geocoding API as requested
+      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_API_KEY}`);
+      const data = await response.json();
+      if (data.status === 'OK') {
+        const results = data.results.map((r: any) => ({
+          formatted_address: r.formatted_address,
+          place_id: r.place_id
+        }));
+        setLocationSuggestions(results);
+        setShowSuggestions(results.length > 0);
+      } else {
+        setLocationSuggestions([]);
+        setShowSuggestions(false);
+      }
+    } catch (error) {
+      console.error("Geocoding fetch failed", error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const selectSuggestion = (address: string) => {
+    setFormData(prev => ({ ...prev, birthLocation: address }));
+    setShowSuggestions(false);
+    validate('birthLocation', address);
   };
 
   const nextStep = () => {
@@ -97,6 +175,7 @@ export default function BirthChartForm({ onSave }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isValid) {
+      localStorage.removeItem('astra_form_draft');
       onSave(formData as UserProfile);
     }
   };
@@ -180,7 +259,7 @@ export default function BirthChartForm({ onSave }: Props) {
                   {touched.name && !errors.name && formData.name && <Check size={12} className="text-emerald-500" />}
                 </label>
                 <div className="relative group">
-                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.name && errors.name ? 'text-rose-500' : touched.name && !errors.name ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
+                  <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.name && errors.name ? 'text-rose-500' : touched.name && !errors.name && formData.name ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
                   <input
                     type="email"
                     placeholder="example@mail.com"
@@ -189,6 +268,11 @@ export default function BirthChartForm({ onSave }: Props) {
                     onBlur={() => handleBlur('name')}
                     onChange={(e) => handleChange('name', e.target.value)}
                   />
+                  {touched.name && formData.name && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      {errors.name ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
+                    </div>
+                  )}
                 </div>
                 <ErrorMsg touched={touched.name} error={errors.name} />
               </div>
@@ -222,7 +306,7 @@ export default function BirthChartForm({ onSave }: Props) {
                   Төрсөн Огноо
                 </label>
                 <div className="relative group">
-                  <Calendar className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthDate && errors.birthDate ? 'text-rose-500' : touched.birthDate && !errors.birthDate ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
+                  <Calendar className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthDate && errors.birthDate ? 'text-rose-500' : touched.birthDate && !errors.birthDate && formData.birthDate ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
                   <input
                     type="date"
                     className={getInputFieldClasses('birthDate')}
@@ -230,6 +314,11 @@ export default function BirthChartForm({ onSave }: Props) {
                     onBlur={() => handleBlur('birthDate')}
                     onChange={(e) => handleChange('birthDate', e.target.value)}
                   />
+                  {touched.birthDate && formData.birthDate && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      {errors.birthDate ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
+                    </div>
+                  )}
                 </div>
                 <ErrorMsg touched={touched.birthDate} error={errors.birthDate} />
               </div>
@@ -239,7 +328,7 @@ export default function BirthChartForm({ onSave }: Props) {
                   Төрсөн Цаг
                 </label>
                 <div className="relative group">
-                  <Clock className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthTime && errors.birthTime ? 'text-rose-500' : touched.birthTime && !errors.birthTime ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
+                  <Clock className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthTime && errors.birthTime ? 'text-rose-500' : touched.birthTime && !errors.birthTime && formData.birthTime ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
                   <input
                     type="time"
                     className={getInputFieldClasses('birthTime' as any)}
@@ -247,6 +336,11 @@ export default function BirthChartForm({ onSave }: Props) {
                     onBlur={() => handleBlur('birthTime')}
                     onChange={(e) => handleChange('birthTime', e.target.value)}
                   />
+                  {touched.birthTime && formData.birthTime && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      {errors.birthTime ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
+                    </div>
+                  )}
                 </div>
                 <ErrorMsg touched={touched.birthTime} error={errors.birthTime} />
               </div>
@@ -264,22 +358,55 @@ export default function BirthChartForm({ onSave }: Props) {
               <div className="relative">
                 <label className="block text-[10px] uppercase tracking-[0.3em] text-slate-500 mb-3 ml-1 font-mono font-bold flex items-center justify-between">
                   Төрсөн Газар
+                  {GOOGLE_MAPS_API_KEY && <span className="text-[8px] text-slate-600 flex items-center gap-1"><Search size={8} /> Google Maps</span>}
                 </label>
                 <div className="relative group">
                   <MapPin className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-300 ${touched.birthLocation && errors.birthLocation ? 'text-rose-500' : touched.birthLocation && !errors.birthLocation && formData.birthLocation ? 'text-emerald-500' : 'text-slate-600 group-focus-within:text-indigo-400'}`} />
                   <input
                     type="text"
-                    placeholder="Хот, Улс"
+                    placeholder="Хот, Улс (Улаанбаатар, Монгол)"
                     className={getInputFieldClasses('birthLocation')}
                     value={formData.birthLocation}
                     onBlur={() => handleBlur('birthLocation')}
                     onChange={(e) => handleChange('birthLocation', e.target.value)}
+                    autoComplete="off"
                   />
-                  {touched.birthLocation && formData.birthLocation && (
+                  
+                  {isSearching && (
+                    <div className="absolute right-12 top-1/2 -translate-y-1/2">
+                      <Loader2 size={16} className="text-indigo-400 animate-spin" />
+                    </div>
+                  )}
+
+                  {touched.birthLocation && formData.birthLocation && !isSearching && (
                     <div className="absolute right-4 top-1/2 -translate-y-1/2">
                       {errors.birthLocation ? <AlertCircle size={16} className="text-rose-500 animate-pulse" /> : <Check size={16} className="text-emerald-500" />}
                     </div>
                   )}
+
+                  {/* Suggestions Dropdown */}
+                  <AnimatePresence>
+                    {showSuggestions && locationSuggestions.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute left-0 right-0 top-full mt-2 bg-slate-900 border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl"
+                      >
+                        {locationSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion.place_id}
+                            type="button"
+                            onClick={() => selectSuggestion(suggestion.formatted_address)}
+                            className="w-full text-left px-4 py-3 text-xs text-slate-300 hover:bg-white/5 hover:text-white transition-colors flex items-center gap-2 border-b border-white/5 last:border-0"
+                          >
+                            <MapPin size={12} className="text-indigo-400" />
+                            {suggestion.formatted_address}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
                 <ErrorMsg touched={touched.birthLocation} error={errors.birthLocation} />
               </div>
