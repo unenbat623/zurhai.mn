@@ -1,0 +1,229 @@
+@import "tailwindcss";
+@source "./";
+@source "../frontend/components/AddProductModal.tsx";
+@source "../frontend/components/AdminUsersView.tsx";
+@source "../frontend/components/BirthChartForm.tsx";
+@source "../frontend/components/ChartSection.tsx";
+@source "../frontend/components/ChartSignCard.tsx";
+@source "../frontend/components/CompatibilityView.tsx";
+@source "../frontend/components/GeneralInfoModal.tsx";
+@source "../frontend/components/HoroscopeDisplay.tsx";
+@source "../frontend/components/NumerologyView.tsx";
+@source "../frontend/components/OnboardingModal.tsx";
+@source "../frontend/components/QuotaError.tsx";
+@source "../frontend/components/SettingsModal.tsx";
+@source "../frontend/components/ShopView.tsx";
+@source "../frontend/components/SubscriptionModal.tsx";
+@source "../frontend/components/TarotView.tsx";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --color-cosmos-black: #050507;
+  --color-cosmos-deep: #08080c;
+  --color-astra-indigo: #4f46e5;
+  --color-astra-purple: #8b5cf6;
+  --color-astra-blue: #38bdf8;
+  --color-astra-gold: #f8d66d;
+  --color-astra-slate: #1e293b;
+}
+
+:root {
+  background-color: var(--color-cosmos-black);
+  color: #e2e8f0;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass-card {
+  background: rgba(15, 15, 25, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+.sleek-glow {
+  text-shadow: 0 0 20px rgba(79, 70, 229, 0.4);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.2);
+  border-radius: 10px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.admin-input {
+  width: 100%;
+  min-width: 0;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(2 6 23 / 0.55);
+  padding: 0.75rem 0.875rem;
+  color: #fff;
+  outline: none;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.admin-input:focus {
+  border-color: rgb(99 102 241 / 0.65);
+  background: rgb(15 23 42 / 0.75);
+}
+
+.mobile-app,
+.mobile-app * {
+  min-width: 0;
+}
+
+.mobile-app {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(79, 70, 229, 0.16), transparent 34rem),
+    #050507;
+  text-rendering: optimizeLegibility;
+}
+
+.mobile-app .mobile-screen {
+  width: 100%;
+}
+
+.mobile-app .max-w-6xl,
+.mobile-app .max-w-5xl,
+.mobile-app .max-w-4xl,
+.mobile-app .max-w-3xl,
+.mobile-app .max-w-2xl,
+.mobile-app .max-w-xl,
+.mobile-app .max-w-lg {
+  max-width: 100%;
+}
+
+.mobile-app .glass-card {
+  border-radius: 1rem;
+  box-shadow: 0 18px 60px rgb(0 0 0 / 0.24);
+}
+
+.mobile-app input,
+.mobile-app select,
+.mobile-app textarea,
+.mobile-app button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-app img {
+  max-width: 100%;
+}
+
+.mobile-app h1,
+.mobile-app h2,
+.mobile-app h3,
+.mobile-app h4,
+.mobile-app p {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .mobile-app .py-24,
+  .mobile-app .py-20,
+  .mobile-app .py-16,
+  .mobile-app .py-12 {
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .mobile-app .p-12,
+  .mobile-app .p-10,
+  .mobile-app .p-8 {
+    padding: 1.25rem;
+  }
+
+  .mobile-app .mb-16,
+  .mobile-app .mb-12,
+  .mobile-app .mb-10 {
+    margin-bottom: 1.5rem;
+  }
+
+  .mobile-app .mt-20,
+  .mobile-app .mt-16,
+  .mobile-app .mt-12,
+  .mobile-app .mt-10 {
+    margin-top: 1.5rem;
+  }
+
+  .mobile-app .text-6xl,
+  .mobile-app .text-5xl,
+  .mobile-app .text-4xl {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+
+  .mobile-app .text-3xl {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+
+  .mobile-app .tracking-\[0\.5em\],
+  .mobile-app .tracking-\[0\.4em\],
+  .mobile-app .tracking-\[0\.3em\] {
+    letter-spacing: 0.16em;
+  }
+
+  .mobile-app .rounded-3xl,
+  .mobile-app .rounded-2xl {
+    border-radius: 1rem;
+  }
+
+  .mobile-app .px-8,
+  .mobile-app .px-6 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .mobile-app .gap-12,
+  .mobile-app .gap-10,
+  .mobile-app .gap-8 {
+    gap: 1.25rem;
+  }
+
+  .mobile-app .aspect-\[4\/5\] {
+    aspect-ratio: 16 / 11;
+  }
+
+  .mobile-app .min-w-\[600px\] {
+    min-width: 520px;
+  }
+}
